@@ -8,6 +8,7 @@
 #include "esp_random.h"
 #include "esp_log.h"
 #include "monocypher-ed25519.h"
+#include "mbedtls/sha256.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -40,6 +41,13 @@ static uint8_t s_seed[SEED_LEN];
 static uint8_t s_secret_key[64];
 static uint8_t s_public[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN];
 static bool s_ready;
+
+static void public_key_device_id(const uint8_t public_key[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN], char out[65])
+{
+    uint8_t digest[32];
+    mbedtls_sha256(public_key, OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN, digest, 0);
+    for (size_t i = 0; i < sizeof(digest); ++i) snprintf(out + i * 2, 3, "%02x", digest[i]);
+}
 
 static esp_err_t save_seed(void)
 {
@@ -96,7 +104,7 @@ esp_err_t openclaw_node_identity_get_public_key(uint8_t out[OPENCLAW_NODE_ED2551
 esp_err_t openclaw_node_identity_get_id(char *out, size_t out_size)
 {
     if (!out || out_size < sizeof(s_public) * 2 + 1 || !s_ready) return ESP_ERR_INVALID_ARG;
-    for (size_t i = 0; i < sizeof(s_public); ++i) snprintf(out + i * 2, 3, "%02x", s_public[i]);
+    public_key_device_id(s_public, out);
     return ESP_OK;
 }
 
