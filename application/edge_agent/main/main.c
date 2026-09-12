@@ -268,8 +268,9 @@ static void start_openclaw_node_if_configured(void)
     }
     size_t command_count = 0;
     const char *const *commands = openclaw_node_device_commands(&command_count);
-    char device_id[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN * 2 + 1];
-    char public_key[64];
+    /* The Native Node task uses these strings after this function returns. */
+    static char device_id[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN * 2 + 1];
+    static char public_key[64];
     if (openclaw_node_identity_get_id(device_id, sizeof(device_id)) != ESP_OK ||
         openclaw_node_identity_get_public_key_b64url(public_key, sizeof(public_key)) != ESP_OK) {
         ESP_LOGW(TAG, "Native Node not started: identity is unavailable");
