@@ -373,6 +373,11 @@ void app_main(void)
     if (identity_err != ESP_OK) {
         ESP_LOGW(TAG, "OpenClaw identity unavailable: %s (Native Node remains disabled)",
                  esp_err_to_name(identity_err));
+    } else {
+        char identity_id[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN * 2 + 1];
+        if (openclaw_node_identity_get_id(identity_id, sizeof(identity_id)) == ESP_OK) {
+            ESP_LOGI(TAG, "OpenClaw identity ready: device_id=%s", identity_id);
+        }
     }
     ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(app_config_load(s_config));
