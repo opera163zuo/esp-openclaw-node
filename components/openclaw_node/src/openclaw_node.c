@@ -74,7 +74,19 @@ static esp_err_t send_json(cJSON *root)
     if (!text) return ESP_ERR_NO_MEM;
     size_t len = strlen(text);
     int invalid = utf8_invalid_offset(text, len);
-    if (invalid >= 0) ESP_LOGE(TAG, "TX JSON contains invalid UTF-8 at byte %d", invalid);
+    if (invalid >= 0) {
+        ESP_LOGE(TAG, "TX JSON contains invalid UTF-8 at byte %d", invalid);
+        int start = invalid > 16 ? invalid - 16 : 0;
+        int count = (int)len - start;
+        if (count > 48) count = 48;
+        char hex[145];
+        int pos = 0;
+        for (int i = 0; i < count && pos < (int)sizeof(hex) - 4; ++i) {
+            pos += snprintf(hex + pos, sizeof(hex) - (size_t)pos, "%02x%s",
+                            (unsigned char)text[start + i], i + 1 == count ? "" : " ");
+        }
+        ESP_LOGE(TAG, "TX bytes around invalid UTF-8: %s", hex);
+    }
     esp_err_t err = (len > MAX_FRAME_SIZE) ? ESP_ERR_INVALID_SIZE :
         (esp_websocket_client_send_text(s_node.ws, text, (int)len, pdMS_TO_TICKS(5000)) < 0
          ? ESP_FAIL : ESP_OK);
