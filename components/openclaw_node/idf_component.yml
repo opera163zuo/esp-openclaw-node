@@ -1,0 +1,5 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/esp_websocket_client:
+    version: "^1.8"
+    public: true
