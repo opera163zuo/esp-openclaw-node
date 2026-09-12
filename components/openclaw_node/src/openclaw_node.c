@@ -54,6 +54,8 @@ static esp_err_t send_json(cJSON *root)
     esp_err_t err = (len > MAX_FRAME_SIZE) ? ESP_ERR_INVALID_SIZE :
         (esp_websocket_client_send_text(s_node.ws, text, (int)len, pdMS_TO_TICKS(5000)) < 0
          ? ESP_FAIL : ESP_OK);
+    ESP_LOGI(TAG, "TX JSON length=%u result=%s", (unsigned)len,
+             err == ESP_OK ? "ok" : "failed");
     cJSON_free(text);
     return err;
 }
@@ -178,7 +180,12 @@ static void websocket_handler(void *arg, esp_event_base_t base, int32_t event_id
 {
     (void)arg; (void)base;
     esp_websocket_event_data_t *event = event_data;
-    if (event_id == WEBSOCKET_EVENT_DATA && event && event->op_code == WS_TRANSPORT_OPCODES_TEXT) {
+    if (event_id == WEBSOCKET_EVENT_CONNECTED) {
+        ESP_LOGI(TAG, "WebSocket connected; waiting for Gateway challenge");
+    } else if (event_id == WEBSOCKET_EVENT_DATA && event) {
+        ESP_LOGI(TAG, "WebSocket data opcode=%d offset=%d data_len=%d payload_len=%d",
+                 event->op_code, event->payload_offset, event->data_len, event->payload_len);
+        if (event->op_code != WS_TRANSPORT_OPCODES_TEXT) return;
         if (event->payload_offset == 0) s_node.rx_length = 0;
         if (event->payload_len <= 0 || (size_t)event->payload_len >= sizeof(s_node.rx_buffer) ||
             event->payload_offset != (int)s_node.rx_length ||
