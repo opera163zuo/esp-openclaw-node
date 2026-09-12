@@ -194,7 +194,7 @@ static void handle_frame(const char *data, size_t len)
         free(copy);
         return;
     }
-    ESP_LOGI(TAG, "Gateway frame JSON parsed (%u bytes)", (unsigned)len);
+    ESP_LOGI(TAG, "Gateway frame JSON parsed (%u bytes): %s", (unsigned)len, copy);
     free(copy);
     cJSON *type = cJSON_GetObjectItem(root, "type");
     if (cJSON_IsString(type) && strcmp(type->valuestring, "event") == 0) {
