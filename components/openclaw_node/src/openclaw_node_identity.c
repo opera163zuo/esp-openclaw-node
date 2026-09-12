@@ -118,9 +118,11 @@ esp_err_t openclaw_node_identity_sign_b64url(const char *payload,
                                              char *out, size_t out_size)
 {
     uint8_t signature[OPENCLAW_NODE_ED25519_SIGNATURE_LEN];
-    if (!payload || !out) return ESP_ERR_INVALID_ARG;
+    if (!payload || !out || out_size < 87) return ESP_ERR_INVALID_ARG;
     esp_err_t err = openclaw_node_identity_sign((const uint8_t *)payload,
                                                  strlen(payload), signature);
     if (err != ESP_OK) return err;
-    return base64url_encode(signature, sizeof(signature), out, out_size);
+    err = base64url_encode(signature, sizeof(signature), out, out_size);
+    if (err == ESP_OK) out[86] = '\0';
+    return err;
 }

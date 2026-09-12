@@ -130,7 +130,7 @@ static esp_err_t send_connect(void)
 {
     if (!s_node.challenged || !s_node.cfg.sign_cb) return ESP_ERR_INVALID_STATE;
     char payload[1024];
-    char signature[256];
+    char signature[90];
     uint64_t signed_at_ms = s_node.challenge_ts ? s_node.challenge_ts : (uint64_t)esp_timer_get_time() / 1000ULL;
     int n = snprintf(payload, sizeof(payload), "v3|%s|%s|node|node||%llu|%s|%s|%s|%s",
                      s_node.cfg.device_id, s_node.cfg.client_id,
