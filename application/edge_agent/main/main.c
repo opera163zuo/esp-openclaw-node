@@ -280,7 +280,7 @@ static void start_openclaw_node_if_configured(void)
         .gateway_token = OPENCLAW_NODE_GATEWAY_TOKEN[0] ? OPENCLAW_NODE_GATEWAY_TOKEN : NULL,
         .device_id = device_id,
         .public_key_b64url = public_key,
-        .client_id = "esp-openclaw",
+        .client_id = "node-host",
         .client_version = "0.1.0",
         .platform = "esp32",
         .device_family = "m5stack-sticks3",

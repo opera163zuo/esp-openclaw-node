@@ -116,16 +116,15 @@ static esp_err_t send_connect(void)
     cJSON_AddStringToObject(root, "type", "req");
     cJSON_AddStringToObject(root, "id", "connect-1");
     cJSON_AddStringToObject(root, "method", "connect");
-    cJSON_AddNumberToObject(params, "minProtocol", PROTOCOL_VERSION);
+    cJSON_AddNumberToObject(params, "minProtocol", 3);
     cJSON_AddNumberToObject(params, "maxProtocol", PROTOCOL_VERSION);
     cJSON_AddStringToObject(client, "id", s_node.cfg.client_id);
     cJSON_AddStringToObject(client, "version", s_node.cfg.client_version ?: "0.1.0");
     cJSON_AddStringToObject(client, "platform", s_node.cfg.platform ?: "esp32");
     cJSON_AddStringToObject(client, "mode", "node");
+    cJSON_AddStringToObject(client, "deviceFamily", s_node.cfg.device_family ?: "m5stack-sticks3");
     cJSON_AddItemToObject(params, "client", client);
     cJSON_AddStringToObject(params, "role", "node");
-    cJSON_AddArrayToObject(params, "scopes");
-    cJSON_AddArrayToObject(params, "caps");
     cJSON_AddStringToObject(params, "locale", "en-US");
     cJSON *commands = cJSON_AddArrayToObject(params, "commands");
     for (size_t i = 0; i < s_node.cfg.command_count; ++i) cJSON_AddItemToArray(commands, cJSON_CreateString(s_node.cfg.commands[i]));
