@@ -13,6 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
+#include "esp_check.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -26,7 +27,8 @@
 typedef struct {
     openclaw_node_config_t cfg;
     esp_websocket_client_handle_t ws;
-    TaskHandle_t task;
+    char rx_buffer[RX_BUFFER_SIZE];
+    size_t rx_length;
     char nonce[256];
     uint64_t challenge_ts;
     bool challenged;
@@ -62,12 +64,13 @@ static esp_err_t send_invoke_result(const char *id, bool ok,
     cJSON *params = cJSON_CreateObject();
     if (!root || !params) { cJSON_Delete(root); cJSON_Delete(params); return ESP_ERR_NO_MEM; }
     cJSON_AddStringToObject(root, "type", "req");
+    /* Native node commands are Gateway events; reply through the node RPC. */
     cJSON_AddStringToObject(root, "id", id);
     cJSON_AddStringToObject(root, "method", "node.invoke.result");
     cJSON_AddStringToObject(params, "id", id);
     cJSON_AddStringToObject(params, "nodeId", s_node.cfg.device_id);
     cJSON_AddBoolToObject(params, "ok", ok);
-    if (ok) cJSON_AddStringToObject(params, "payloadJSON", payload_json ?: "{}");
+    if (ok) cJSON_AddStringToObject(params, "payloadJSON", payload_json ? payload_json : "{}");
     else {
         cJSON *error = cJSON_CreateObject();
         cJSON_AddStringToObject(error, "code", "INVALID_REQUEST");
@@ -88,9 +91,9 @@ static esp_err_t send_connect(void)
     uint64_t signed_at_ms = s_node.challenge_ts ? s_node.challenge_ts : (uint64_t)esp_timer_get_time() / 1000ULL;
     int n = snprintf(payload, sizeof(payload), "v3|%s|%s|node|node||%llu|%s|%s|%s|%s",
                      s_node.cfg.device_id, s_node.cfg.client_id,
-                     (unsigned long long)signed_at_ms, s_node.cfg.gateway_token ?: "",
-                     s_node.nonce, s_node.cfg.platform ?: "esp32",
-                     s_node.cfg.device_family ?: "esp-openclaw");
+                     (unsigned long long)signed_at_ms, s_node.cfg.gateway_token ? s_node.cfg.gateway_token : "",
+                     s_node.nonce, s_node.cfg.platform ? s_node.cfg.platform : "esp32",
+                     s_node.cfg.device_family ? s_node.cfg.device_family : "esp-openclaw");
     if (n < 0 || (size_t)n >= sizeof(payload)) return ESP_ERR_INVALID_SIZE;
     ESP_RETURN_ON_ERROR(s_node.cfg.sign_cb(payload, signature, sizeof(signature), s_node.cfg.user_ctx), TAG, "sign");
 
@@ -163,13 +166,23 @@ static void websocket_handler(void *arg, esp_event_base_t base, int32_t event_id
 {
     (void)arg; (void)base;
     esp_websocket_event_data_t *event = event_data;
-    if (event_id == WEBSOCKET_EVENT_DATA && event && event->op_code == WS_TRANSPORT_OPCODES_TEXT) handle_frame(event->data_ptr, event->data_len);
-    else if (event_id == WEBSOCKET_EVENT_DISCONNECTED) s_node.connected = false;
+    if (event_id == WEBSOCKET_EVENT_DATA && event && event->op_code == WS_TRANSPORT_OPCODES_TEXT) {
+        if (event->data_len > sizeof(s_node.rx_buffer) - s_node.rx_length - 1) {
+            ESP_LOGE(TAG, "Gateway frame exceeds RX buffer");
+            s_node.rx_length = 0;
+        } else {
+            memcpy(s_node.rx_buffer + s_node.rx_length, event->data_ptr, event->data_len);
+            s_node.rx_length += event->data_len;
+            s_node.rx_buffer[s_node.rx_length] = '\0';
+            handle_frame(s_node.rx_buffer, s_node.rx_length);
+            s_node.rx_length = 0;
+        }
+    } else if (event_id == WEBSOCKET_EVENT_DISCONNECTED) s_node.connected = false;
 }
 
 esp_err_t openclaw_node_start(const openclaw_node_config_t *config)
 {
-    if (!config || !config->gateway_url || !config->device_id || !config->public_key_b64url || !config->client_id || !config->commands || !config->sign_cb || !config->command_cb || s_node.ws) return ESP_ERR_INVALID_ARG;
+    if (!config || !config->gateway_url || !config->device_id || !config->public_key_b64url || !config->client_id || !config->commands || !config->command_count || !config->sign_cb || !config->command_cb || s_node.ws) return ESP_ERR_INVALID_ARG;
     memset(&s_node, 0, sizeof(s_node)); s_node.cfg = *config;
     esp_websocket_client_config_t ws_cfg = { .uri = config->gateway_url, .network_timeout_ms = 10000, .reconnect_timeout_ms = 5000 };
     s_node.ws = esp_websocket_client_init(&ws_cfg); if (!s_node.ws) return ESP_ERR_NO_MEM;
