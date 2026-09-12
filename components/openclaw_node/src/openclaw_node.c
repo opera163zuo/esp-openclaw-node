@@ -151,8 +151,15 @@ static void handle_frame(const char *data, size_t len)
     char *copy = strndup(data, len);
     if (!copy) return;
     cJSON *root = cJSON_Parse(copy);
+    if (!root) {
+        const char *error = cJSON_GetErrorPtr();
+        unsigned offset = (error && error >= copy) ? (unsigned)(error - copy) : 0;
+        ESP_LOGE(TAG, "Gateway JSON parse failed at byte %u: %s", offset, copy);
+        free(copy);
+        return;
+    }
+    ESP_LOGI(TAG, "Gateway frame JSON parsed (%u bytes)", (unsigned)len);
     free(copy);
-    if (!root) return;
     cJSON *type = cJSON_GetObjectItem(root, "type");
     if (cJSON_IsString(type) && strcmp(type->valuestring, "event") == 0) {
         cJSON *event = cJSON_GetObjectItem(root, "event");
@@ -160,9 +167,10 @@ static void handle_frame(const char *data, size_t len)
         if (cJSON_IsString(event) && strcmp(event->valuestring, "connect.challenge") == 0 && payload) {
             cJSON *nonce = cJSON_GetObjectItem(payload, "nonce");
             cJSON *ts = cJSON_GetObjectItem(payload, "ts");
+            ESP_LOGI(TAG, "Gateway challenge nonce_type=%d ts_type=%d", nonce ? nonce->type : -1, ts ? ts->type : -1);
             if (cJSON_IsString(nonce) && cJSON_IsNumber(ts) && ts->valuedouble >= 0 && strlen(nonce->valuestring) < sizeof(s_node.nonce)) {
                 strlcpy(s_node.nonce, nonce->valuestring, sizeof(s_node.nonce)); s_node.challenge_ts = (uint64_t)ts->valuedouble; s_node.challenged = true; send_connect();
-            }
+            } else ESP_LOGE(TAG, "Invalid Gateway challenge payload");
         } else if (cJSON_IsString(event) && strcmp(event->valuestring, "node.invoke.request") == 0 && payload) {
             cJSON *id = cJSON_GetObjectItem(payload, "id"); cJSON *command = cJSON_GetObjectItem(payload, "command"); cJSON *params = cJSON_GetObjectItem(payload, "paramsJSON");
             char result[2048] = "{}";
