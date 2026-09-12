@@ -207,6 +207,7 @@ esp_err_t openclaw_node_start(const openclaw_node_config_t *config)
         .reconnect_timeout_ms = 5000,
         .buffer_size = RX_BUFFER_SIZE,
         .task_stack = 8192,
+        .subprotocol = "openclaw",
     };
     s_node.ws = esp_websocket_client_init(&ws_cfg); if (!s_node.ws) return ESP_ERR_NO_MEM;
     esp_websocket_register_events(s_node.ws, WEBSOCKET_EVENT_ANY, websocket_handler, NULL);
