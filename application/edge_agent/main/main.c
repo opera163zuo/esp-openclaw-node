@@ -23,6 +23,8 @@
 #include "esp_board_manager_includes.h"
 #include "captive_dns.h"
 #include "cmd_wifi.h"
+#include "openclaw_node_identity.h"
+#include "openclaw_node_device.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #if CONFIG_APP_CLAW_CAP_IM_WECHAT
@@ -324,6 +326,11 @@ void app_main(void)
     ESP_LOGI(TAG, "Edge Agent version: %s", edge_agent_get_version());
     ESP_ERROR_CHECK(app_allocate_runtime_state());
     ESP_ERROR_CHECK(init_nvs());
+    esp_err_t identity_err = openclaw_node_identity_init();
+    if (identity_err != ESP_OK) {
+        ESP_LOGW(TAG, "OpenClaw identity unavailable: %s (Native Node remains disabled)",
+                 esp_err_to_name(identity_err));
+    }
     ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(app_config_load(s_config));
     app_config_to_claw(s_config, s_claw_config);
