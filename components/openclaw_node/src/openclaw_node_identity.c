@@ -11,6 +11,26 @@
 #include <stdio.h>
 #include <string.h>
 
+static const char s_b64url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+static esp_err_t base64url_encode(const uint8_t *src, size_t src_len, char *out, size_t out_size)
+{
+    size_t max_len = ((src_len + 2) / 3) * 4;
+    if (out_size < max_len) return ESP_ERR_INVALID_SIZE;
+    size_t produced = 0;
+    for (size_t i = 0; i < src_len; i += 3) {
+        uint32_t v = (uint32_t)src[i] << 16;
+        if (i + 1 < src_len) v |= (uint32_t)src[i + 1] << 8;
+        if (i + 2 < src_len) v |= src[i + 2];
+        out[produced++] = s_b64url[(v >> 18) & 0x3f];
+        out[produced++] = s_b64url[(v >> 12) & 0x3f];
+        if (i + 1 < src_len) out[produced++] = s_b64url[(v >> 6) & 0x3f];
+        if (i + 2 < src_len) out[produced++] = s_b64url[v & 0x3f];
+    }
+    out[produced] = '\0';
+    return ESP_OK;
+}
+
 #define TAG "openclaw_identity"
 #define NVS_NAMESPACE "openclaw"
 #define NVS_KEY "ed25519_seed"
@@ -100,6 +120,12 @@ esp_err_t openclaw_node_identity_get_id(char *out, size_t out_size)
     return ESP_OK;
 }
 
+esp_err_t openclaw_node_identity_get_public_key_b64url(char *out, size_t out_size)
+{
+    if (!out || !s_ready) return ESP_ERR_INVALID_ARG;
+    return base64url_encode(s_public, sizeof(s_public), out, out_size);
+}
+
 esp_err_t openclaw_node_identity_sign(const uint8_t *payload, size_t payload_len,
                                       uint8_t signature[OPENCLAW_NODE_ED25519_SIGNATURE_LEN])
 {
@@ -116,4 +142,15 @@ esp_err_t openclaw_node_identity_sign(const uint8_t *payload, size_t payload_len
     if (st == PSA_SUCCESS) st = psa_sign_message(key, PSA_ALG_PURE_EDDSA, payload, payload_len, signature, OPENCLAW_NODE_ED25519_SIGNATURE_LEN, &sig_len);
     if (key) psa_destroy_key(key);
     return (st == PSA_SUCCESS && sig_len == OPENCLAW_NODE_ED25519_SIGNATURE_LEN) ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t openclaw_node_identity_sign_b64url(const char *payload,
+                                             char *out, size_t out_size)
+{
+    uint8_t signature[OPENCLAW_NODE_ED25519_SIGNATURE_LEN];
+    if (!payload || !out) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = openclaw_node_identity_sign((const uint8_t *)payload,
+                                                 strlen(payload), signature);
+    if (err != ESP_OK) return err;
+    return base64url_encode(signature, sizeof(signature), out, out_size);
 }

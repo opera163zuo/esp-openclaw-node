@@ -25,7 +25,8 @@
 #include "cmd_wifi.h"
 #include "openclaw_node_identity.h"
 #include "openclaw_node_device.h"
-#include "freertos/FreeRTOS.h"
+#include "openclaw_node.h"
+#include "openclaw_node_config.h"
 #include "freertos/task.h"
 #if CONFIG_APP_CLAW_CAP_IM_WECHAT
 #include "cap_im_wechat.h"
@@ -250,6 +251,48 @@ static esp_err_t main_wechat_login_mark_persisted(void)
 }
 #endif
 
+static esp_err_t openclaw_node_sign_cb(const char *payload,
+                                       char *signature_out,
+                                       size_t signature_size,
+                                       void *user_ctx)
+{
+    (void)user_ctx;
+    return openclaw_node_identity_sign_b64url(payload, signature_out, signature_size);
+}
+
+static void start_openclaw_node_if_configured(void)
+{
+    if (OPENCLAW_NODE_GATEWAY_URL[0] == '\0') {
+        ESP_LOGI(TAG, "OpenClaw Native Node disabled: no Gateway URL configured");
+        return;
+    }
+    size_t command_count = 0;
+    const char *const *commands = openclaw_node_device_commands(&command_count);
+    char device_id[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN * 2 + 1];
+    char public_key[64];
+    if (openclaw_node_identity_get_id(device_id, sizeof(device_id)) != ESP_OK ||
+        openclaw_node_identity_get_public_key_b64url(public_key, sizeof(public_key)) != ESP_OK) {
+        ESP_LOGW(TAG, "Native Node not started: identity is unavailable");
+        return;
+    }
+    openclaw_node_config_t config = {
+        .gateway_url = OPENCLAW_NODE_GATEWAY_URL,
+        .gateway_token = OPENCLAW_NODE_GATEWAY_TOKEN[0] ? OPENCLAW_NODE_GATEWAY_TOKEN : NULL,
+        .device_id = device_id,
+        .public_key_b64url = public_key,
+        .client_id = "esp-openclaw",
+        .client_version = "0.1.0",
+        .platform = "esp32",
+        .device_family = "m5stack-sticks3",
+        .commands = commands,
+        .command_count = command_count,
+        .sign_cb = openclaw_node_sign_cb,
+        .command_cb = openclaw_node_device_command,
+    };
+    esp_err_t err = openclaw_node_start(&config);
+    if (err != ESP_OK) ESP_LOGW(TAG, "Native Node start failed: %s", esp_err_to_name(err));
+}
+
 static esp_err_t init_nvs(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -418,6 +461,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(app_claw_set_save_config_callback(main_save_claw_config, NULL));
     ESP_ERROR_CHECK(app_claw_start(s_claw_config));
+    start_openclaw_node_if_configured();
 #if CONFIG_APP_CLAW_CAP_IM_LOCAL
     ESP_ERROR_CHECK(http_server_webim_bind_im());
 #endif

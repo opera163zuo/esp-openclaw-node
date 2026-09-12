@@ -23,9 +23,16 @@ esp_err_t openclaw_node_identity_init(void);
 esp_err_t openclaw_node_identity_get_public_key(uint8_t out[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN]);
 esp_err_t openclaw_node_identity_get_id(char *out, size_t out_size);
 
+/** Export the public key as unpadded base64url for the Gateway handshake. */
+esp_err_t openclaw_node_identity_get_public_key_b64url(char *out, size_t out_size);
+
 /** Sign an exact UTF-8 payload with Ed25519 and return raw 64-byte signature. */
 esp_err_t openclaw_node_identity_sign(const uint8_t *payload, size_t payload_len,
                                       uint8_t signature[OPENCLAW_NODE_ED25519_SIGNATURE_LEN]);
+
+/** Sign an exact UTF-8 payload and export the raw signature as base64url. */
+esp_err_t openclaw_node_identity_sign_b64url(const char *payload,
+                                             char *out, size_t out_size);
 
 #ifdef __cplusplus
 }
