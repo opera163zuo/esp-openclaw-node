@@ -23,7 +23,7 @@
 
 #define TAG "openclaw_node"
 #define PROTOCOL_VERSION 4
-#define RX_BUFFER_SIZE 8192
+#define RX_BUFFER_SIZE 24576
 #define MAX_FRAME_SIZE (64 * 1024)
 
 static int utf8_invalid_offset(const char *data, size_t len)
