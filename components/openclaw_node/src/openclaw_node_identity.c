@@ -7,7 +7,7 @@
 #include "nvs_flash.h"
 #include "esp_random.h"
 #include "esp_log.h"
-#include "psa/crypto.h"
+#include "monocypher-ed25519.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -37,6 +37,7 @@ static esp_err_t base64url_encode(const uint8_t *src, size_t src_len, char *out,
 #define SEED_LEN 32
 
 static uint8_t s_seed[SEED_LEN];
+static uint8_t s_secret_key[64];
 static uint8_t s_public[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN];
 static bool s_ready;
 
@@ -66,25 +67,6 @@ static esp_err_t load_seed(bool *exists)
     return ESP_OK;
 }
 
-static esp_err_t derive_public_key(void)
-{
-    psa_key_attributes_t attrs = PSA_KEY_ATTRIBUTES_INIT;
-    psa_key_id_t key = 0;
-    size_t public_len = 0;
-    psa_status_t st;
-    psa_set_key_type(&attrs, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS));
-    psa_set_key_bits(&attrs, 255);
-    psa_set_key_usage_flags(&attrs, PSA_KEY_USAGE_SIGN_HASH | PSA_KEY_USAGE_SIGN_MESSAGE);
-    psa_set_key_algorithm(&attrs, PSA_ALG_PURE_EDDSA);
-    st = psa_import_key(&attrs, s_seed, sizeof(s_seed), &key);
-    psa_reset_key_attributes(&attrs);
-    if (st != PSA_SUCCESS) return ESP_ERR_NOT_SUPPORTED;
-    st = psa_export_public_key(key, s_public, sizeof(s_public), &public_len);
-    psa_destroy_key(key);
-    if (st != PSA_SUCCESS || public_len != sizeof(s_public)) return ESP_ERR_NOT_SUPPORTED;
-    return ESP_OK;
-}
-
 esp_err_t openclaw_node_identity_init(void)
 {
     if (s_ready) return ESP_OK;
@@ -96,12 +78,10 @@ esp_err_t openclaw_node_identity_init(void)
         err = save_seed();
         if (err != ESP_OK) return err;
     }
-    if (psa_crypto_init() != PSA_SUCCESS) return ESP_ERR_NOT_SUPPORTED;
-    err = derive_public_key();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Ed25519 is unavailable in this ESP-IDF crypto configuration");
-        return err;
-    }
+    uint8_t seed_copy[SEED_LEN];
+    memcpy(seed_copy, s_seed, sizeof(seed_copy));
+    crypto_ed25519_key_pair(s_secret_key, s_public, seed_copy);
+    crypto_wipe(seed_copy, sizeof(seed_copy));
     s_ready = true;
     return ESP_OK;
 }
@@ -130,18 +110,8 @@ esp_err_t openclaw_node_identity_sign(const uint8_t *payload, size_t payload_len
                                       uint8_t signature[OPENCLAW_NODE_ED25519_SIGNATURE_LEN])
 {
     if (!payload || !signature || !s_ready) return ESP_ERR_INVALID_ARG;
-    psa_key_attributes_t attrs = PSA_KEY_ATTRIBUTES_INIT;
-    psa_key_id_t key = 0;
-    size_t sig_len = 0;
-    psa_set_key_type(&attrs, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS));
-    psa_set_key_bits(&attrs, 255);
-    psa_set_key_usage_flags(&attrs, PSA_KEY_USAGE_SIGN_MESSAGE);
-    psa_set_key_algorithm(&attrs, PSA_ALG_PURE_EDDSA);
-    psa_status_t st = psa_import_key(&attrs, s_seed, sizeof(s_seed), &key);
-    psa_reset_key_attributes(&attrs);
-    if (st == PSA_SUCCESS) st = psa_sign_message(key, PSA_ALG_PURE_EDDSA, payload, payload_len, signature, OPENCLAW_NODE_ED25519_SIGNATURE_LEN, &sig_len);
-    if (key) psa_destroy_key(key);
-    return (st == PSA_SUCCESS && sig_len == OPENCLAW_NODE_ED25519_SIGNATURE_LEN) ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
+    crypto_ed25519_sign(signature, s_secret_key, payload, payload_len);
+    return ESP_OK;
 }
 
 esp_err_t openclaw_node_identity_sign_b64url(const char *payload,
