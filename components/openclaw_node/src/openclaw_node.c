@@ -19,11 +19,33 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #define TAG "openclaw_node"
 #define PROTOCOL_VERSION 4
 #define RX_BUFFER_SIZE 8192
 #define MAX_FRAME_SIZE (64 * 1024)
+
+static int utf8_invalid_offset(const char *data, size_t len)
+{
+    size_t i = 0;
+    while (i < len) {
+        uint8_t c = (uint8_t)data[i];
+        size_t need = c < 0x80 ? 0 : (c >= 0xc2 && c <= 0xdf) ? 1 :
+                      (c >= 0xe0 && c <= 0xef) ? 2 :
+                      (c >= 0xf0 && c <= 0xf4) ? 3 : SIZE_MAX;
+        if (need == SIZE_MAX || i + need >= len) return (int)i;
+        for (size_t j = 1; j <= need; ++j) {
+            if (((uint8_t)data[i + j] & 0xc0) != 0x80) return (int)(i + j);
+        }
+        if ((need == 2 && c == 0xe0 && (uint8_t)data[i + 1] < 0xa0) ||
+            (need == 2 && c == 0xed && (uint8_t)data[i + 1] >= 0xa0) ||
+            (need == 3 && c == 0xf0 && (uint8_t)data[i + 1] < 0x90) ||
+            (need == 3 && c == 0xf4 && (uint8_t)data[i + 1] >= 0x90)) return (int)i;
+        i += need + 1;
+    }
+    return -1;
+}
 
 typedef struct {
     openclaw_node_config_t cfg;
@@ -51,6 +73,8 @@ static esp_err_t send_json(cJSON *root)
     char *text = cJSON_PrintUnformatted(root);
     if (!text) return ESP_ERR_NO_MEM;
     size_t len = strlen(text);
+    int invalid = utf8_invalid_offset(text, len);
+    if (invalid >= 0) ESP_LOGE(TAG, "TX JSON contains invalid UTF-8 at byte %d", invalid);
     esp_err_t err = (len > MAX_FRAME_SIZE) ? ESP_ERR_INVALID_SIZE :
         (esp_websocket_client_send_text(s_node.ws, text, (int)len, pdMS_TO_TICKS(5000)) < 0
          ? ESP_FAIL : ESP_OK);
@@ -193,6 +217,11 @@ static void websocket_handler(void *arg, esp_event_base_t base, int32_t event_id
     } else if (event_id == WEBSOCKET_EVENT_DATA && event) {
         ESP_LOGI(TAG, "WebSocket data opcode=%d offset=%d data_len=%d payload_len=%d",
                  event->op_code, event->payload_offset, event->data_len, event->payload_len);
+        if (event->op_code == WS_TRANSPORT_OPCODES_CLOSE) {
+            ESP_LOGW(TAG, "Gateway close bytes: %02x %02x", event->data_len > 0 ? event->data_ptr[0] : 0,
+                     event->data_len > 1 ? event->data_ptr[1] : 0);
+            return;
+        }
         if (event->op_code != WS_TRANSPORT_OPCODES_TEXT) return;
         if (event->payload_offset == 0) s_node.rx_length = 0;
         if (event->payload_len <= 0 || (size_t)event->payload_len >= sizeof(s_node.rx_buffer) ||
