@@ -1,201 +1,222 @@
 <div align="center">
 
-  <a href="https://esp-claw.com/en/">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/src/assets/logos/logo-f.svg" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/src/assets/logos/logo.svg" />
-      <img alt="ESP-Claw logo" src="./docs/src/assets/logos/logo.svg" width="50%" />
-    </picture>
+  <a href="https://github.com/opera163zuo/esp-openclaw">
+    <img src="./docs/src/assets/logos/logo.svg" alt="ESP-OpenClaw logo" width="45%" />
   </a>
 
-  <h1>ESP-Claw 🦞 AI Agent Framework for IoT Devices</h1>
-
-  <h3>💬 Chat as Creation · 🚀 Millisecond Response · 🧩 Smart and Extensible · 😋 Grows with You</h3>
+  <h1>ESP-OpenClaw 🦞</h1>
+  <h3>面向 ESP32 的 OpenClaw Native Node 与边缘 Agent 项目</h3>
 
   <p>
-    <a href="https://www.espressif.com">
-      <img src="https://img.shields.io/badge/runs_on-ESP32_Series-red?style=flat-square" alt="Runs on ESP32 Series" />
+    <a href="https://github.com/opera163zuo/esp-openclaw">
+      <img src="https://img.shields.io/badge/platform-ESP32--S3-blue?style=flat-square" alt="ESP32-S3" />
     </a>
     <a href="./LICENSE">
-      <img src="https://img.shields.io/github/license/espressif/esp-claw?style=flat-square" alt="License" />
+      <img src="https://img.shields.io/github/license/opera163zuo/esp-openclaw?style=flat-square" alt="License" />
     </a>
   </p>
 
-  <a href="https://esp-claw.com/en/">Home</a>
+  <a href="./README_EN.md">English</a>
   |
-  <a href="https://esp-claw.com/en/tutorial/">Docs</a>
+  <a href="https://esp-claw.com/">ESP-Claw 文档</a>
   |
-  <a href="https://esp-claw.com/en/flash/">Online Flashing</a>
-  |
-  <a href="https://esp-claw.com/en/reference-project/build-from-source/">Build from Source</a>
-  |
-  <a href="./README_CN.md">简体中文</a>
+  <a href="./application/edge_agent/README.md">构建说明</a>
 
 </div>
 
-**ESP-Claw** is Espressif's **Chat Coding** AI agent framework for IoT devices. It defines device behavior through conversation and completes the full loop of sensing, decision-making, and execution locally on Espressif chips. Inspired by the OpenClaw concept and reimplemented in C, ESP-Claw is lightweight, intelligent, and continuously evolving. With just an ESP32-series chip that costs only a few dollars, you can experience what makes ESP-Claw so nimble.
+## 项目简介
 
-<div align="center">
-  <img alt="From traditional IoT to Edge Agent" src="./docs/static/from-traditional-iot-to-edge-agent.webp" width="90%" />
-</div>
+ESP-OpenClaw 是基于 Espressif ESP-Claw 改造的 OpenClaw Native Node 项目，当前重点适配 **M5Stack StickS3**。
 
-## 🌟 Key Features
+项目采用明确的分层架构：
 
-Traditional IoT usually stops at connectivity: devices can connect to the network, but they cannot think; they can execute commands, but they cannot make decisions. ESP-Claw brings the Agent Runtime down onto Espressif chips, turning them from passive executors into active decision-making centers.
+```text
+OpenClaw Gateway
+  ├─ Agent / LLM / Memory / 权限 / 通信路由
+  └─ 通过 WebSocket 调用 Native Node
+        ↓ Wi‑Fi
+M5Stack StickS3 / ESP32-S3
+  └─ 设备身份、硬件能力和固定命令执行
+```
 
-<table align="center">
-  <tr>
-    <th><div align="center"> 💬 Chat as Creation </div></th>
-    <th><div align="center"> ⚙️ Event Driven </div></th>
-  </tr>
-  <tr>
-    <th>
-      <div align="center">
-        IM chat + dynamic Lua loading
-        <br />
-        Ordinary users can define device behavior without programming
-      </div>
-    </th>
-    <th>
-      <div align="center">
-        Any event can trigger the Agent Loop and more
-        <br />
-        Response can be as fast as milliseconds
-      </div>
-    </th>
-  </tr>
-  <tr>
-    <th width="45%">
-      <video src="https://github.com/user-attachments/assets/717a4dae-fbd3-4364-afca-2d45432f156e" />
-    </th>
-    <th width="45%">
-      <video src="https://github.com/user-attachments/assets/5a274a4a-e1dc-4c13-81aa-fb1c22d470bf" />
-    </th>
-  </tr>
+ESP32 不运行 OpenClaw Agent、LLM 或社交平台逻辑。复杂理解、任务编排、权限控制和通信路由由 Gateway 负责；设备只执行经过声明和限制的命令。
 
-  <tr>
-    <td colspan="2"><!-- spacer row --></td>
-  </tr>
+> 本仓库仍保留 ESP-Claw 原有的边缘 Agent、Capability、Lua、Memory 和配置系统。Native Node 是本项目新增并已在 M5Stack StickS3 上真实验收的主要方向。
 
-  <tr>
-    <th><div align="center"> 🧬 Structured Memory </div></th>
-    <th><div align="center"> 📤 MCP Communication </div></th>
-  </tr>
-  <tr>
-    <th>
-      <div align="center">
-        Organize memories in a structured way
-        <br />
-        Privacy stays off the cloud
-      </div>
-    </th>
-    <th>
-      <div align="center">
-        Supports standard MCP devices
-        <br />
-        Works as both Server and Client
-      </div>
-    </th>
-  </tr>
-  <tr>
-    <th width="45%">
-      <video src="https://github.com/user-attachments/assets/2c8bcaa4-3606-49d3-9b70-86ad3234d48f" />
-    </th>
-    <th width="45%">
-      <video src="https://github.com/user-attachments/assets/b1f71cee-e428-4b92-ad7e-d7816839f866" />
-    </th>
-  </tr>
+## 当前状态
 
-  <tr>
-    <td colspan="2"><!-- spacer row --></td>
-  </tr>
+### 已完成并在真实设备上验证
 
-  <tr>
-    <th><div align="center"> 🧰 Ready Out of the Box </div></th>
-    <th><div align="center"> 🧩 Component Extensibility </div></th>
-  </tr>
-  <tr>
-    <th>
-      <div align="center">
-        Quick setup with Board Manager
-        <br />
-        Supports one-click flashing
-      </div>
-    </th>
-    <th>
-      <div align="center">
-        Every module can be trimmed as needed
-        <br />
-        You can also add your own component integrations
-      </div>
-    </th>
-  </tr>
-</table>
+- OpenClaw Native Node WebSocket 连接与协议 v4 握手
+- `connect.challenge` 与 v3 Ed25519 Device Auth
+- NVS 持久化设备身份
+- 基于原始 Ed25519 公钥 SHA-256 的稳定 Node ID
+- Gateway 配对、命令面批准和 `node.invoke` 调用
+- M5Stack StickS3：ESP32-S3-PICO-1、8 MB Flash、8 MB PSRAM
+- 设备信息与状态：
+  - `device.info`
+  - `device.status`
+  - `device.network`
+  - `device.button.status`
+- 显示与声音：
+  - `device.backlight`
+  - `device.screen.clear`
+  - `audio.volume`
+  - `audio.tone`
+- 设备控制：
+  - `device.restart`
+- 受限文件能力：
+  - `node.files.list`
+  - `node.files.read`
+  - `node.files.write`
+  - `node.files.delete`
+  - `node.files.copy`
+  - `node.files.move`
+- 受限 Lua 脚本与任务：
+  - `node.lua.run`
+  - `node.lua.run_async`
+  - `node.lua.jobs`
+  - `node.lua.job`
+  - `node.lua.stop`
+  - `node.lua.stop_all`
 
-## 📦 Quick Start
+以上命令已通过真实 M5StickS3 与 OpenClaw Gateway 的端到端调用验证。文件测试使用临时文件并已清理；Lua 测试使用设备内已有脚本，不是任意 Lua 字符串执行。
 
-<div align="center">
-  <img src="docs/src/assets/images/claw-breadboard-photo.jpg" width="80%" alt="ESP-Claw on ESP32-S3 Breadboard" />
-</div>
+### 当前未完成
 
-ESP-Claw now supports a wide range of development boards based on ESP32-S3, ESP32-P4, ESP32-C5, and ESP32-S31, including breadboards, M5Stack CoreS3, and many others. Supported boards in [`./application/edge_agent/boards/`](./application/edge_agent/boards/) can be flashed online directly: configuration and flashing are done entirely in the browser, with no need to compile firmware locally or install a development environment first.
+- BLE HID Native Node 命令、电脑端蓝牙配对及键盘/鼠标实际输入验收
+- `cap_cli` 的 Native Node 受限接入
+- 摄像头、截图、屏幕读取和完整电脑控制
+- 任意 Shell、任意终端、任意桌面脚本
+- Native Node 录音、音频流、STT/TTS 和连续语音对话
+- OTA 固件升级、远程刷写和生产级密钥轮换
+- 更完整的屏幕文字/UI Native Node API
 
-<div align="center">
-  <a href="https://esp-claw.com/en/flash/">
-    <img src="./docs/static/flash-via-browser-button.svg" width="200" />
-  </a>
-</div>
+当前不能把 BLE HID、截图、远程桌面或完整电脑控制称为已实现功能。
 
-You can also build ESP-Claw locally. Please refer to the [local build documentation](https://esp-claw.com/en/tutorial/) for board adaptation, building, and flashing. Boards not listed above, as well as chips like the ESP32-P4, can also be supported through local builds and flashing.
+## Native Node 命令参数示例
 
-You can find practical examples in our [documentation](https://esp-claw.com/en/tutorial/).
+### 播放提示音
 
-### Supported Platforms
+```json
+{
+  "frequencyHz": 880,
+  "durationMs": 250
+}
+```
 
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/static/claw-providers-white.webp" />
-    <source media="(prefers-color-scheme: light)" srcset="./docs/static/claw-providers-black.webp" />
-    <img alt="Supported Platforms" src="./docs/static/claw-providers-black.webp" width="90%" />
-  </picture>
-</div>
+限制：频率 `100–4000 Hz`，时长 `1–2000 ms`。
 
-**LLM**: ESP-Claw now supports both OpenAI-style APIs and Anthropic-style APIs. It natively supports GPT models from OpenAI, Qwen models from Alibaba Cloud Bailian, Claude models from Anthropic, DeepSeek models from DeepSeek API, and also supports custom endpoints.
+### 复制和移动文件
 
-> [!TIP]
->
-> ESP-Claw's self-programming capability depends on models with strong tool use and instruction-following ability. We recommend `gpt-5.4`, `qwen3.6-plus`, `claude4.6-sonnet`, `deepseek-v4-pro` or models with comparable capability.
+```json
+{
+  "src_path": "/fatfs/source.txt",
+  "dst_path": "/fatfs/copy.txt"
+}
+```
 
-**IM**: ESP-Claw supports Telegram, QQ, Feishu, and WeChat, and can be extended further.
+复制和移动使用 `src_path` / `dst_path`，不是 `source` / `destination`。
 
-## Development Plan
+### 执行设备内已有 Lua 脚本
 
-ESP-Claw is still under active development. Feel free to open an issue to report problems or request features. You can also share your ideas through our [online survey (in Chinese)](https://fcn5wbhnyubf.feishu.cn/share/base/form/shrcndYcjbGFY1ymttTSyYoGIPh).
+```json
+{
+  "path": "/system/skills/builtin_lua_modules/scripts/builtin/test/system_info.lua",
+  "timeout_ms": 5000
+}
+```
 
-[Click here to view our TODO List (in Chinese)](https://fcn5wbhnyubf.feishu.cn/wiki/SRlgwWUYei4WmykU8uMcUtzTnFf?table=tblWSgzWcyW7jv7B&view=vewaP9B0KX) and vote for the features or issues you care about. That helps us prioritize them sooner.
+异步任务示例：
 
-## Security
+```json
+{
+  "path": "/system/skills/builtin_lua_modules/scripts/builtin/test/system_info.lua",
+  "timeout_ms": 5000,
+  "name": "protocol-test",
+  "log_bytes": 2048
+}
+```
 
-ESP-Claw is not currently included in the Espressif Bug Bounty Program. Responsible vulnerability reports remain highly valued, but no monetary reward is promised or guaranteed under this policy.
+## 安全边界
 
-## 📷 Follow Us
+- 文件命令只接受绝对路径。
+- 禁止包含 `..` 的路径穿越。
+- `/fatfs` 是可写数据区；`/system` 是只读固件区。
+- 文件能力保留原有沙箱和大小限制。
+- Lua 只能运行设备上已有并通过路径校验的脚本。
+- 不开放 `shell.exec`、`terminal.exec`、`lua.eval` 或任意命令字符串。
+- 不把 Native Node 调用结果当成完整电脑控制结果。
+- Gateway URL、Token、Wi‑Fi 密码、私钥和其他凭据不得提交 Git。
 
-If this project helps you, please consider giving it a star. ⭐⭐⭐⭐⭐
+## 硬件与构建
 
-### Star History
+已验证环境：
 
-<div align="center">
-  <a href="https://www.star-history.com/?repos=espressif%2Fesp-claw&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=espressif/esp-claw&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=espressif/esp-claw&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=espressif/esp-claw&type=date&legend=top-left" />
-  </picture>
-  </a>
-</div>
+```text
+Board: M5Stack StickS3
+MCU: ESP32-S3-PICO-1
+Flash: 8 MB
+PSRAM: 8 MB
+ESP-IDF: 5.5.4
+Serial: /dev/cu.usbmodem101（示例）
+```
 
-## Acknowledgements
+准备 ESP-IDF 后构建：
 
-Inspired by [OpenClaw](https://github.com/openclaw/openclaw).
+```bash
+cd application/edge_agent
+source "$HOME/esp/esp-idf/export.sh"
+idf.py set-target esp32s3
+idf.py reconfigure
+idf.py build
+```
 
-The implementation of Agent Loop, IM communication, and related capabilities on ESP32 also draws on [MimiClaw](https://github.com/memovai/mimiclaw).
+烧录前请确认目标板、芯片型号、Flash、PSRAM 和串口。烧录：
+
+```bash
+idf.py -p /dev/cu.usbmodem101 flash
+```
+
+Native Node 默认关闭连接配置。生产或安全固件应保持：
+
+```c
+#define OPENCLAW_NODE_GATEWAY_URL ""
+#define OPENCLAW_NODE_GATEWAY_TOKEN ""
+```
+
+真实 Gateway 联调需要临时使用本地未提交配置，完成后恢复空 URL/Token，并将 Gateway 恢复为 loopback 监听。
+
+## 代码结构
+
+```text
+components/openclaw_node/                 Native Node 传输、身份和命令分发
+components/claw_capabilities/cap_files/   受限文件 Capability
+components/claw_capabilities/cap_lua/     Lua 脚本与异步任务 Capability
+components/claw_capabilities/cap_cli/     原有受限 ESP Console Capability
+application/edge_agent/                   M5Stack StickS3 应用与板级集成
+components/lua_modules/                   原有 Lua 模块
+```
+
+## GitHub 修改记录
+
+本项目的 Native Node 主要修改已提交到 `master`，包括：
+
+- Native Node WebSocket 传输和 OpenClaw 握手
+- Monocypher Ed25519 身份与 NVS 持久化
+- 设备信息、状态、网络、按键、背光、重启、音频和屏幕命令
+- 受限文件和 Lua Capability 的 Native Node 映射
+- ESP-IDF Component Manifest 与依赖修复
+- 真实 M5StickS3 / Gateway 联调修复
+
+临时 Gateway URL、Token 和 Wi‑Fi 凭据不在 GitHub 中。
+
+## 上游项目与致谢
+
+本项目基于 [Espressif ESP-Claw](https://github.com/espressif/esp-claw)；感谢其 Agent Loop、Capability、Lua、Memory、板级支持和文档工作。
+
+Native Node 协议方向受到 [OpenClaw](https://github.com/openclaw/openclaw) 启发。
+
+## 许可证
+
+请参阅 [`LICENSE`](./LICENSE)。
