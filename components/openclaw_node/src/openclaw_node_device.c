@@ -17,9 +17,11 @@
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_codec_dev.h"
+#include "system_ui.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_INFO,
@@ -29,6 +31,8 @@ static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_RESTART,
     OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS,
     OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME,
+    OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE,
+    OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR,
 };
 
 const char *const *openclaw_node_device_commands(size_t *count)
@@ -163,6 +167,52 @@ static esp_err_t audio_volume(const char *params_json, char *out, size_t size)
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
+static esp_err_t audio_tone(const char *params_json, char *out, size_t size)
+{
+    cJSON *params = cJSON_Parse(params_json ? params_json : "{}");
+    cJSON *freq = params ? cJSON_GetObjectItem(params, "frequencyHz") : NULL;
+    cJSON *duration = params ? cJSON_GetObjectItem(params, "durationMs") : NULL;
+    void *device = NULL;
+    esp_codec_dev_sample_info_t fs = {.sample_rate = 16000, .channel = 2, .bits_per_sample = 16};
+    esp_codec_dev_handle_t codec = NULL;
+    esp_err_t err = ESP_OK;
+    if (!cJSON_IsNumber(freq) || !cJSON_IsNumber(duration) || freq->valuedouble < 100 ||
+        freq->valuedouble > 4000 || duration->valuedouble < 1 || duration->valuedouble > 2000 ||
+        freq->valuedouble != (int)freq->valuedouble || duration->valuedouble != (int)duration->valuedouble) {
+        cJSON_Delete(params); return ESP_ERR_INVALID_ARG;
+    }
+    err = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_AUDIO_DAC, &device);
+    if (err == ESP_OK && device) {
+        codec = *(esp_codec_dev_handle_t *)device;
+        if (esp_codec_dev_open(codec, &fs) != ESP_CODEC_DEV_OK) err = ESP_FAIL;
+    } else err = ESP_FAIL;
+    if (err == ESP_OK) {
+        uint32_t frames = (uint32_t)(16000U * (uint32_t)duration->valuedouble / 1000U);
+        int16_t samples[512]; float phase = 0.0f;
+        float step = 2.0f * (float)M_PI * (float)freq->valuedouble / 16000.0f;
+        uint32_t done = 0;
+        while (done < frames && err == ESP_OK) {
+            uint32_t n = frames - done > 256 ? 256 : frames - done;
+            for (uint32_t i = 0; i < n; ++i) { samples[2*i] = samples[2*i+1] = (int16_t)(sinf(phase) * 9000.0f); phase += step; }
+            if (esp_codec_dev_write(codec, samples, (int)(n * 2 * sizeof(int16_t))) != ESP_CODEC_DEV_OK) err = ESP_FAIL;
+            done += n;
+        }
+        esp_codec_dev_close(codec);
+    }
+    cJSON_Delete(params);
+    if (err != ESP_OK) return err;
+    int n = snprintf(out, size, "{\"command\":\"audio.tone\",\"played\":true}");
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
+static esp_err_t screen_clear(char *out, size_t size)
+{
+    esp_err_t err = system_ui_show_home();
+    if (err != ESP_OK) return err;
+    int n = snprintf(out, size, "{\"command\":\"device.screen.clear\",\"cleared\":true}");
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
 esp_err_t openclaw_node_device_command(const char *command,
                                        const char *params_json,
                                        char *result_json,
@@ -183,5 +233,7 @@ esp_err_t openclaw_node_device_command(const char *command,
     }
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS) == 0) return button_status(result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME) == 0) return audio_volume(params_json, result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE) == 0) return audio_tone(params_json, result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR) == 0) return screen_clear(result_json, result_size);
     return ESP_ERR_NOT_FOUND;
 }
