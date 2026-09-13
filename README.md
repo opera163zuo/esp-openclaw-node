@@ -37,28 +37,72 @@ ESP32 不运行 Agent 或 LLM，只执行固件中明确声明、校验和限制
 - `device.button.status`、`device.backlight`、`device.restart`
 - `audio.volume`、`audio.tone`
 
-### 显示
+### Native Node 接口清单
 
-- 复用原工程的 LVGL + Tiny TTF + NotoSansSC 中文字体链路
-- `device.screen.text` 中文通知显示
-- `device.screen.fullscreen.enter`
-- `device.screen.fullscreen.text`
-- `device.screen.fullscreen.clear`
-- `device.screen.fullscreen.exit`
-- 中文文本自动换行
-- 对天气和常用符号提供受限图形替换，避免字体缺字显示方框
-- 所有 LVGL 对象操作通过 System UI 线程执行
+以下命令由固件固定声明，并通过 OpenClaw Gateway 的 `node.invoke` 调用：
 
-当前稳定显示方向是**竖屏**。`orientation: landscape` 尚未实现真正的 LCD 横屏切换，不能把命令接受或 API 返回当作横屏完成。真正横屏需要同步重建 ST7789 panel、LVGL adapter、frame buffer、flush 坐标和 UI 页面。
+#### 设备信息与状态
 
-### 受限文件与 Lua
+| 接口 | 参数 | 说明 |
+|---|---|---|
+| `device.info` | `{}` | 返回设备型号、芯片、固件和能力信息 |
+| `device.status` | `{}` | 返回设备运行状态 |
+| `device.network` | `{}` | 返回 Wi‑Fi 连接状态、IP 和网关 |
+| `device.button.status` | `{}` | 返回按键状态 |
 
-- `node.files.list/read/write/delete/copy/move`
-- `node.lua.run/run_async/jobs/job/stop/stop_all`
-- 文件路径限制在既有沙箱内；拒绝 `..` 路径穿越
-- `/fatfs` 可写，`/system` 只读
-- Lua 只能运行设备上已有且通过路径校验的脚本
+#### 设备控制、显示与音频
 
+| 接口 | 参数 | 说明 |
+|---|---|---|
+| `device.backlight` | `{"level":0..100}` | 设置背光亮度 |
+| `device.restart` | `{}` | 重启设备 |
+| `device.screen.clear` | `{}` | 清除通知层并恢复系统主页 |
+| `device.screen.text` | `{"text":"..."}` | 在系统 UI 通知区域显示受限中文文本 |
+| `device.screen.fullscreen.enter` | `{}` | 进入独立全屏页面 |
+| `device.screen.fullscreen.text` | `{"text":"...","orientation":"portrait"}` | 显示全屏中文文本 |
+| `device.screen.fullscreen.clear` | `{}` | 清除全屏页面内容 |
+| `device.screen.fullscreen.exit` | `{}` | 退出全屏并恢复系统主页 |
+| `audio.volume` | 受限音量参数 | 设置音量 |
+| `audio.tone` | `{"frequencyHz":880,"durationMs":250}` | 播放提示音 |
+
+全屏文本示例：
+
+```json
+{
+  "text": "上海今日晴，23–28°C",
+  "orientation": "portrait"
+}
+```
+
+当前真正硬件横屏尚未完成；`orientation: "landscape"` 不能作为横屏成功依据。
+
+#### 受限文件接口
+
+| 接口 | 参数 | 说明 |
+|---|---|---|
+| `node.files.list` | 路径参数 | 列出沙箱目录 |
+| `node.files.read` | 路径参数 | 读取文件 |
+| `node.files.write` | 路径和文本内容 | 写入文本文件 |
+| `node.files.delete` | 路径参数 | 删除文件 |
+| `node.files.copy` | `src_path`、`dst_path` | 复制文件 |
+| `node.files.move` | `src_path`、`dst_path` | 移动文件 |
+
+文件接口只允许既有沙箱路径；拒绝 `..` 路径穿越，`/fatfs` 可写，`/system` 只读。
+
+#### 受限 Lua 接口
+
+| 接口 | 说明 |
+|---|---|
+| `node.lua.run` | 运行设备上已有且通过路径校验的 Lua 脚本 |
+| `node.lua.run_async` | 异步运行已有 Lua 脚本 |
+| `node.lua.jobs` | 查询异步任务列表 |
+| `node.lua.job` | 查询单个异步任务 |
+| `node.lua.stop` | 停止指定异步任务 |
+| `node.lua.stop_all` | 停止全部异步任务 |
+
+不开放任意 Shell、任意终端、`lua.eval` 或任意命令字符串。
+
+## 显示接口注意事项
 ## 明确未实现
 
 - 稳定的运行时横屏/竖屏切换

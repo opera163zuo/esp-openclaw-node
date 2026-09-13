@@ -37,27 +37,72 @@ The ESP32 does not run the Agent or LLM. It executes only explicitly declared an
 - `device.button.status`, `device.backlight`, and `device.restart`
 - `audio.volume` and `audio.tone`
 
-### Display
+### Native Node API reference
 
-- Existing LVGL + Tiny TTF + NotoSansSC Chinese rendering path
-- `device.screen.text` for bounded Chinese notices
-- `device.screen.fullscreen.enter`
-- `device.screen.fullscreen.text`
-- `device.screen.fullscreen.clear`
-- `device.screen.fullscreen.exit`
-- Automatic line wrapping for Chinese text
-- Bounded weather/common-symbol graphic mapping to avoid missing-glyph boxes
-- All LVGL object operations run through the System UI task
+The firmware advertises these commands and executes them through OpenClaw Gateway `node.invoke`.
 
-The stable display orientation is currently **portrait**. Runtime LCD landscape switching is not complete. An accepted `orientation: landscape` parameter or API response is not evidence of physical rotation. A correct implementation must rebuild the ST7789 panel path, LVGL adapter, frame buffers, flush geometry, and UI pages together.
+#### Device information and status
 
-### Sandboxed files and Lua
+| API | Parameters | Description |
+|---|---|---|
+| `device.info` | `{}` | Device, chip, firmware, and capability information |
+| `device.status` | `{}` | Runtime status |
+| `device.network` | `{}` | Wi-Fi state, IP address, and gateway |
+| `device.button.status` | `{}` | Button state |
 
-- `node.files.list/read/write/delete/copy/move`
-- `node.lua.run/run_async/jobs/job/stop/stop_all`
-- Existing filesystem sandbox and `..` traversal rejection
-- `/fatfs` writable and `/system` read-only
-- Lua is limited to existing, path-validated device-side scripts
+#### Device control, display, and audio
+
+| API | Parameters | Description |
+|---|---|---|
+| `device.backlight` | `{"level":0..100}` | Set backlight level |
+| `device.restart` | `{}` | Restart the device |
+| `device.screen.clear` | `{}` | Clear the notice layer and restore the system home screen |
+| `device.screen.text` | `{"text":"..."}` | Show bounded Chinese text in the system UI notice area |
+| `device.screen.fullscreen.enter` | `{}` | Enter the dedicated fullscreen page |
+| `device.screen.fullscreen.text` | `{"text":"...","orientation":"portrait"}` | Show bounded fullscreen text |
+| `device.screen.fullscreen.clear` | `{}` | Clear fullscreen content |
+| `device.screen.fullscreen.exit` | `{}` | Exit fullscreen and restore the system home screen |
+| `audio.volume` | Bounded volume parameters | Set volume |
+| `audio.tone` | `{"frequencyHz":880,"durationMs":250}` | Play a tone |
+
+Fullscreen text example:
+
+```json
+{
+  "text": "Shanghai: sunny, 23–28°C",
+  "orientation": "portrait"
+}
+```
+
+Physical landscape switching is not complete. `orientation: "landscape"` must not be treated as evidence that the LCD rotated.
+
+#### Sandboxed file APIs
+
+| API | Parameters | Description |
+|---|---|---|
+| `node.files.list` | Path parameters | List a sandbox directory |
+| `node.files.read` | Path parameters | Read a file |
+| `node.files.write` | Path and text content | Write a text file |
+| `node.files.delete` | Path parameters | Delete a file |
+| `node.files.copy` | `src_path`, `dst_path` | Copy a file |
+| `node.files.move` | `src_path`, `dst_path` | Move a file |
+
+File APIs retain the existing sandbox. `..` traversal is rejected; `/fatfs` is writable and `/system` is read-only.
+
+#### Sandboxed Lua APIs
+
+| API | Description |
+|---|---|
+| `node.lua.run` | Run an existing, path-validated device-side Lua script |
+| `node.lua.run_async` | Run an existing Lua script asynchronously |
+| `node.lua.jobs` | List asynchronous jobs |
+| `node.lua.job` | Inspect one asynchronous job |
+| `node.lua.stop` | Stop one asynchronous job |
+| `node.lua.stop_all` | Stop all asynchronous jobs |
+
+Arbitrary shell, terminal, `lua.eval`, and arbitrary command strings are not exposed.
+
+## Display API notes
 
 ## Not implemented
 
