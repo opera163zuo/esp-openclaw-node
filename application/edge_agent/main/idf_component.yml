@@ -13,6 +13,8 @@ dependencies:
   openclaw_node:
     path: ../../../components/openclaw_node
 
+  espressif/esp_codec_dev: "*"
+
   espressif/esp_websocket_client:
     version: "^1.8"
     public: true

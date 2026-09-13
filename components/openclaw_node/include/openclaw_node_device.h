@@ -17,6 +17,7 @@ extern "C" {
 #define OPENCLAW_NODE_DEVICE_COMMAND_BACKLIGHT "device.backlight"
 #define OPENCLAW_NODE_DEVICE_COMMAND_RESTART "device.restart"
 #define OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS "device.button.status"
+#define OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME "audio.volume"
 
 /** Return the static command names supplied by this module. */
 const char *const *openclaw_node_device_commands(size_t *count);

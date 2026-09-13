@@ -16,6 +16,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
+#include "esp_codec_dev.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
@@ -27,6 +28,7 @@ static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_BACKLIGHT,
     OPENCLAW_NODE_DEVICE_COMMAND_RESTART,
     OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS,
+    OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME,
 };
 
 const char *const *openclaw_node_device_commands(size_t *count)
@@ -137,6 +139,30 @@ static esp_err_t button_status(char *out, size_t size)
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
+static esp_err_t audio_volume(const char *params_json, char *out, size_t size)
+{
+    cJSON *params = cJSON_Parse(params_json ? params_json : "{}");
+    cJSON *volume = params ? cJSON_GetObjectItem(params, "volume") : NULL;
+    void *device = NULL;
+    int value;
+    esp_err_t err = ESP_OK;
+    if (!cJSON_IsNumber(volume) || volume->valuedouble < 0 || volume->valuedouble > 100 ||
+        volume->valuedouble != (int)volume->valuedouble) {
+        cJSON_Delete(params);
+        return ESP_ERR_INVALID_ARG;
+    }
+    value = (int)volume->valuedouble;
+    err = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_AUDIO_DAC, &device);
+    if (err == ESP_OK && device) {
+        esp_codec_dev_handle_t codec = *(esp_codec_dev_handle_t *)device;
+        err = esp_codec_dev_set_out_vol(codec, value) == ESP_CODEC_DEV_OK ? ESP_OK : ESP_FAIL;
+    }
+    cJSON_Delete(params);
+    if (err != ESP_OK) return err;
+    int n = snprintf(out, size, "{\"command\":\"audio.volume\",\"volume\":%d}", value);
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
 esp_err_t openclaw_node_device_command(const char *command,
                                        const char *params_json,
                                        char *result_json,
@@ -156,5 +182,6 @@ esp_err_t openclaw_node_device_command(const char *command,
         return ESP_OK;
     }
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS) == 0) return button_status(result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME) == 0) return audio_volume(params_json, result_json, result_size);
     return ESP_ERR_NOT_FOUND;
 }
