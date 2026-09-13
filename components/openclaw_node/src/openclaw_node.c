@@ -90,7 +90,7 @@ static esp_err_t send_json(cJSON *root)
     esp_err_t err = (len > MAX_FRAME_SIZE) ? ESP_ERR_INVALID_SIZE :
         (esp_websocket_client_send_text(s_node.ws, text, (int)len, pdMS_TO_TICKS(5000)) < 0
          ? ESP_FAIL : ESP_OK);
-    ESP_LOGI(TAG, "TX JSON length=%u result=%s", (unsigned)len,
+    ESP_LOGD(TAG, "TX JSON length=%u result=%s", (unsigned)len,
              err == ESP_OK ? "ok" : "failed");
     cJSON_free(text);
     return err;
@@ -117,7 +117,7 @@ static esp_err_t send_invoke_result(const char *id, bool ok,
     else {
         cJSON *error = cJSON_CreateObject();
         cJSON_AddStringToObject(error, "code", "INVALID_REQUEST");
-        cJSON_AddStringToObject(error, "message", error_message ?: "command failed");
+        cJSON_AddStringToObject(error, "message", error_message ? error_message : "command failed");
         cJSON_AddItemToObject(params, "error", error);
     }
     cJSON_AddItemToObject(root, "params", params);
@@ -194,7 +194,9 @@ static void handle_frame(const char *data, size_t len)
         free(copy);
         return;
     }
-    ESP_LOGI(TAG, "Gateway frame JSON parsed (%u bytes): %s", (unsigned)len, copy);
+    /* Do not log complete Gateway frames: responses may contain credentials or
+     * other sensitive metadata. Keep parse diagnostics length-only. */
+    ESP_LOGD(TAG, "Gateway frame JSON parsed (%u bytes)", (unsigned)len);
     free(copy);
     cJSON *type = cJSON_GetObjectItem(root, "type");
     if (cJSON_IsString(type) && strcmp(type->valuestring, "event") == 0) {
@@ -203,7 +205,7 @@ static void handle_frame(const char *data, size_t len)
         if (cJSON_IsString(event) && strcmp(event->valuestring, "connect.challenge") == 0 && payload) {
             cJSON *nonce = cJSON_GetObjectItem(payload, "nonce");
             cJSON *ts = cJSON_GetObjectItem(payload, "ts");
-            ESP_LOGI(TAG, "Gateway challenge nonce_type=%d ts_type=%d", nonce ? nonce->type : -1, ts ? ts->type : -1);
+            ESP_LOGD(TAG, "Gateway challenge received (nonce/ts types=%d/%d)", nonce ? nonce->type : -1, ts ? ts->type : -1);
             if (cJSON_IsString(nonce) && cJSON_IsNumber(ts) && ts->valuedouble >= 0 && strlen(nonce->valuestring) < sizeof(s_node.nonce)) {
                 strlcpy(s_node.nonce, nonce->valuestring, sizeof(s_node.nonce)); s_node.challenge_ts = (uint64_t)ts->valuedouble; s_node.challenged = true; send_connect();
             } else ESP_LOGE(TAG, "Invalid Gateway challenge payload");
@@ -215,7 +217,11 @@ static void handle_frame(const char *data, size_t len)
         }
     } else if (cJSON_IsString(type) && strcmp(type->valuestring, "res") == 0) {
         cJSON *payload = cJSON_GetObjectItem(root, "payload");
-        if (payload && cJSON_GetObjectItem(payload, "type") && strcmp(cJSON_GetObjectItem(payload, "type")->valuestring, "hello-ok") == 0) s_node.connected = true;
+        cJSON *hello_type = payload ? cJSON_GetObjectItem(payload, "type") : NULL;
+        if (cJSON_IsString(hello_type) && strcmp(hello_type->valuestring, "hello-ok") == 0) {
+            s_node.connected = true;
+            ESP_LOGI(TAG, "Gateway hello-ok received");
+        }
     }
     cJSON_Delete(root);
 }
@@ -227,7 +233,7 @@ static void websocket_handler(void *arg, esp_event_base_t base, int32_t event_id
     if (event_id == WEBSOCKET_EVENT_CONNECTED) {
         ESP_LOGI(TAG, "WebSocket connected; waiting for Gateway challenge");
     } else if (event_id == WEBSOCKET_EVENT_DATA && event) {
-        ESP_LOGI(TAG, "WebSocket data opcode=%d offset=%d data_len=%d payload_len=%d",
+        ESP_LOGD(TAG, "WebSocket data opcode=%d offset=%d data_len=%d payload_len=%d",
                  event->op_code, event->payload_offset, event->data_len, event->payload_len);
         if (event->op_code == WS_TRANSPORT_OPCODES_CLOSE) {
             ESP_LOGW(TAG, "Gateway close bytes: %02x %02x", event->data_len > 0 ? event->data_ptr[0] : 0,

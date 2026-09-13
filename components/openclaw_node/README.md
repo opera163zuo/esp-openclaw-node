@@ -12,14 +12,14 @@ routing, and policy remain on the OpenClaw Gateway.
   `node.invoke.result` replies
 - Keeps command execution behind an application callback and a declared-command
   allowlist
-- `application/openclaw_node`: reserved standalone application target
-- M5StickS3 board support remains in `application/edge_agent`; it has not yet
-  been wired to the new transport
+- M5StickS3 board support is wired in `application/edge_agent`, including
+  persistent Ed25519 identity and the `device.info`/`device.status` commands
 
-This is an integration skeleton, not a claimed production-ready firmware.
-The signing callback and persistent device identity must be backed by secure
-storage before deployment. Do not put a private key in `sdkconfig` for a real
-product.
+The current implementation has been built, flashed, paired with a real
+OpenClaw Gateway, and invoked on an M5StickS3. It remains a first-stage
+implementation: the device command surface is intentionally limited to the
+two read-only commands above, and no arbitrary shell, Lua, or firmware update
+command is exposed. Do not put a private key in `sdkconfig` for a real product.
 
 ## Protocol boundary
 
