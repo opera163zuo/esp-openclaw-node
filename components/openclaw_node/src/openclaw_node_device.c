@@ -19,6 +19,9 @@
 #include "esp_codec_dev.h"
 #include "system_ui.h"
 #include "cJSON.h"
+#include "cap_files.h"
+#include "cap_lua.h"
+#include "claw_cap.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -33,12 +36,56 @@ static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME,
     OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE,
     OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR,
+    OPENCLAW_NODE_COMMAND_FILES_READ,
+    OPENCLAW_NODE_COMMAND_FILES_WRITE,
+    OPENCLAW_NODE_COMMAND_FILES_DELETE,
+    OPENCLAW_NODE_COMMAND_FILES_COPY,
+    OPENCLAW_NODE_COMMAND_FILES_MOVE,
+    OPENCLAW_NODE_COMMAND_FILES_LIST,
+    OPENCLAW_NODE_COMMAND_LUA_RUN,
+    OPENCLAW_NODE_COMMAND_LUA_RUN_ASYNC,
+    OPENCLAW_NODE_COMMAND_LUA_JOBS,
+    OPENCLAW_NODE_COMMAND_LUA_JOB,
+    OPENCLAW_NODE_COMMAND_LUA_STOP,
+    OPENCLAW_NODE_COMMAND_LUA_STOP_ALL,
 };
 
 const char *const *openclaw_node_device_commands(size_t *count)
 {
     if (count) *count = sizeof(s_commands) / sizeof(s_commands[0]);
     return s_commands;
+}
+
+static esp_err_t call_existing_cap(const char *cap_name, const char *params_json,
+                                   char *out, size_t out_size)
+{
+    claw_cap_call_context_t ctx = {
+        .caller = CLAW_CAP_CALLER_SYSTEM,
+        .source_cap = "openclaw_native_node",
+    };
+    esp_err_t err = claw_cap_call(cap_name, params_json ? params_json : "{}",
+                                  &ctx, out, out_size);
+    if (err != ESP_OK && out && out_size > 0 && out[0] == '\0') {
+        snprintf(out, out_size, "{\"error\":\"%s\"}", esp_err_to_name(err));
+    }
+    return err;
+}
+
+static const char *map_native_cap(const char *command)
+{
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_FILES_READ) == 0) return "read_file";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_FILES_WRITE) == 0) return "write_file";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_FILES_DELETE) == 0) return "delete_file";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_FILES_COPY) == 0) return "copy_file";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_FILES_MOVE) == 0) return "move_file";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_FILES_LIST) == 0) return "list_dir";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_LUA_RUN) == 0) return "lua_run_script";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_LUA_RUN_ASYNC) == 0) return "lua_run_script_async";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_LUA_JOBS) == 0) return "lua_list_async_jobs";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_LUA_JOB) == 0) return "lua_get_async_job";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_LUA_STOP) == 0) return "lua_stop_async_job";
+    if (strcmp(command, OPENCLAW_NODE_COMMAND_LUA_STOP_ALL) == 0) return "lua_stop_all_async_jobs";
+    return NULL;
 }
 
 static esp_err_t write_info(char *out, size_t size)
@@ -60,6 +107,7 @@ static esp_err_t write_info(char *out, size_t size)
                      id, chip.revision, chip.cores, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
+
 
 static esp_err_t write_status(char *out, size_t size)
 {
@@ -235,5 +283,7 @@ esp_err_t openclaw_node_device_command(const char *command,
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME) == 0) return audio_volume(params_json, result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE) == 0) return audio_tone(params_json, result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR) == 0) return screen_clear(result_json, result_size);
+    const char *cap = map_native_cap(command);
+    if (cap) return call_existing_cap(cap, params_json, result_json, result_size);
     return ESP_ERR_NOT_FOUND;
 }

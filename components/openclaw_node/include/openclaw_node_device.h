@@ -20,6 +20,18 @@ extern "C" {
 #define OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME "audio.volume"
 #define OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE "audio.tone"
 #define OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR "device.screen.clear"
+#define OPENCLAW_NODE_COMMAND_FILES_READ "node.files.read"
+#define OPENCLAW_NODE_COMMAND_FILES_WRITE "node.files.write"
+#define OPENCLAW_NODE_COMMAND_FILES_DELETE "node.files.delete"
+#define OPENCLAW_NODE_COMMAND_FILES_COPY "node.files.copy"
+#define OPENCLAW_NODE_COMMAND_FILES_MOVE "node.files.move"
+#define OPENCLAW_NODE_COMMAND_FILES_LIST "node.files.list"
+#define OPENCLAW_NODE_COMMAND_LUA_RUN "node.lua.run"
+#define OPENCLAW_NODE_COMMAND_LUA_RUN_ASYNC "node.lua.run_async"
+#define OPENCLAW_NODE_COMMAND_LUA_JOBS "node.lua.jobs"
+#define OPENCLAW_NODE_COMMAND_LUA_JOB "node.lua.job"
+#define OPENCLAW_NODE_COMMAND_LUA_STOP "node.lua.stop"
+#define OPENCLAW_NODE_COMMAND_LUA_STOP_ALL "node.lua.stop_all"
 
 /** Return the static command names supplied by this module. */
 const char *const *openclaw_node_device_commands(size_t *count);

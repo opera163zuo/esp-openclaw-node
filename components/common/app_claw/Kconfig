@@ -47,6 +47,12 @@ menu "App Claw Config"
                 Enable the files capability and keep app_claw's direct dependency
                 on cap_files.
 
+        config APP_CLAW_CAP_CLI
+            bool "Enable CLI capability"
+            default y
+            help
+                Enable the allowlisted ESP console capability.
+
         config APP_CLAW_CAP_MEMORY
             bool "Enable claw_memory subsystem"
             default y

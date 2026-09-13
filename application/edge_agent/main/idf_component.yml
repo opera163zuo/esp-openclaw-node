@@ -13,6 +13,12 @@ dependencies:
   openclaw_node:
     path: ../../../components/openclaw_node
 
+  cap_files:
+    path: ../../../components/claw_capabilities/cap_files
+
+  cap_lua:
+    path: ../../../components/claw_capabilities/cap_lua
+
   espressif/esp_codec_dev: "*"
 
   espressif/esp_websocket_client:
