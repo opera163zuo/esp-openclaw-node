@@ -82,3 +82,25 @@ devices:
       default_percent: 100
     peripherals:
       - name: ledc_backlight
+
+  - name: button_1
+    type: button
+    sub_type: gpio
+    version: default
+    config:
+      active_level: 0
+      long_press_time: 2000
+      short_press_time: 100
+    peripherals:
+      - name: gpio_button_1
+
+  - name: button_2
+    type: button
+    sub_type: gpio
+    version: default
+    config:
+      active_level: 0
+      long_press_time: 2000
+      short_press_time: 100
+    peripherals:
+      - name: gpio_button_2

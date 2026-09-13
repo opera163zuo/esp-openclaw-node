@@ -12,6 +12,7 @@
 #include "esp_board_periph.h"
 #include "periph_ledc.h"
 #include "driver/ledc.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -25,6 +26,7 @@ static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_NETWORK,
     OPENCLAW_NODE_DEVICE_COMMAND_BACKLIGHT,
     OPENCLAW_NODE_DEVICE_COMMAND_RESTART,
+    OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS,
 };
 
 const char *const *openclaw_node_device_commands(size_t *count)
@@ -124,6 +126,17 @@ static void restart_task(void *arg)
     esp_restart();
 }
 
+static esp_err_t button_status(char *out, size_t size)
+{
+    int key1 = gpio_get_level(GPIO_NUM_11);
+    int key2 = gpio_get_level(GPIO_NUM_12);
+    int n = snprintf(out, size,
+                     "{\"command\":\"device.button.status\",\"button1\":{\"gpio\":11,\"pressed\":%s},"
+                     "\"button2\":{\"gpio\":12,\"pressed\":%s}}",
+                     key1 == 0 ? "true" : "false", key2 == 0 ? "true" : "false");
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
 esp_err_t openclaw_node_device_command(const char *command,
                                        const char *params_json,
                                        char *result_json,
@@ -142,5 +155,6 @@ esp_err_t openclaw_node_device_command(const char *command,
         snprintf(result_json, result_size, "{\"command\":\"device.restart\",\"scheduled\":true}");
         return ESP_OK;
     }
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_BUTTON_STATUS) == 0) return button_status(result_json, result_size);
     return ESP_ERR_NOT_FOUND;
 }

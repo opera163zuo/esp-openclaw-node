@@ -66,3 +66,26 @@ peripherals:
       duty: 1023
       duty_resolution: LEDC_TIMER_10_BIT
       output_invert: false
+
+  # User keys from the official StickS3 pin map.
+  - name: gpio_button_1
+    type: gpio
+    role: io
+    config:
+      gpio_num: 11
+      mode: GPIO_MODE_INPUT
+      pull_up_en: GPIO_PULLUP_ENABLE
+      pull_down_en: GPIO_PULLDOWN_DISABLE
+      intr_type: GPIO_INTR_DISABLE
+      default_level: 1
+
+  - name: gpio_button_2
+    type: gpio
+    role: io
+    config:
+      gpio_num: 12
+      mode: GPIO_MODE_INPUT
+      pull_up_en: GPIO_PULLUP_ENABLE
+      pull_down_en: GPIO_PULLDOWN_DISABLE
+      intr_type: GPIO_INTR_DISABLE
+      default_level: 1
