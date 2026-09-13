@@ -73,3 +73,12 @@ devices:
         vendor_config: NULL
     peripherals:
       - name: spi_display
+
+  # LEDC-controlled LCD backlight on GPIO38.
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    config:
+      default_percent: 100
+    peripherals:
+      - name: ledc_backlight

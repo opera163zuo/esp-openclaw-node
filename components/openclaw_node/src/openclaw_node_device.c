@@ -7,6 +7,14 @@
 #include "esp_heap_caps.h"
 #include "esp_psram.h"
 #include "esp_netif.h"
+#include "esp_board_manager.h"
+#include "esp_board_manager_defs.h"
+#include "esp_board_periph.h"
+#include "periph_ledc.h"
+#include "driver/ledc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +23,8 @@ static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_INFO,
     OPENCLAW_NODE_DEVICE_COMMAND_STATUS,
     OPENCLAW_NODE_DEVICE_COMMAND_NETWORK,
+    OPENCLAW_NODE_DEVICE_COMMAND_BACKLIGHT,
+    OPENCLAW_NODE_DEVICE_COMMAND_RESTART,
 };
 
 const char *const *openclaw_node_device_commands(size_t *count)
@@ -75,6 +85,45 @@ static esp_err_t write_network(char *out, size_t size)
                      connected ? "true" : "false", ip_text, gateway_text);
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
+
+static esp_err_t set_backlight(const char *params_json, char *out, size_t size)
+{
+    cJSON *params = cJSON_Parse(params_json ? params_json : "{}");
+    cJSON *level = params ? cJSON_GetObjectItem(params, "level") : NULL;
+    void *handle_ptr = NULL;
+
+    periph_ledc_config_t *ledc_cfg = NULL;
+    periph_ledc_handle_t *ledc_handle = NULL;
+    esp_err_t err = ESP_OK;
+    if (!cJSON_IsNumber(level) || level->valuedouble < 0 || level->valuedouble > 100 ||
+        level->valuedouble != (int)level->valuedouble) {
+        cJSON_Delete(params);
+        return ESP_ERR_INVALID_ARG;
+    }
+    err = esp_board_manager_get_periph_handle("ledc_backlight", &handle_ptr);
+    if (err == ESP_OK) {
+        ledc_handle = (periph_ledc_handle_t *)handle_ptr;
+        err = esp_board_periph_get_config("ledc_backlight", (void **)&ledc_cfg);
+    }
+    if (err == ESP_OK) {
+        uint32_t max_duty = (1U << (uint32_t)ledc_cfg->duty_resolution) - 1U;
+        uint32_t duty = ((uint32_t)level->valuedouble * max_duty) / 100U;
+        err = ledc_set_duty(ledc_handle->speed_mode, ledc_handle->channel, duty);
+        if (err == ESP_OK) err = ledc_update_duty(ledc_handle->speed_mode, ledc_handle->channel);
+    }
+    cJSON_Delete(params);
+    if (err != ESP_OK) return err;
+    int n = snprintf(out, size, "{\"command\":\"device.backlight\",\"level\":%d}", (int)level->valuedouble);
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
+static void restart_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(300));
+    esp_restart();
+}
+
 esp_err_t openclaw_node_device_command(const char *command,
                                        const char *params_json,
                                        char *result_json,
@@ -87,5 +136,11 @@ esp_err_t openclaw_node_device_command(const char *command,
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_INFO) == 0) return write_info(result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_STATUS) == 0) return write_status(result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_NETWORK) == 0) return write_network(result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_BACKLIGHT) == 0) return set_backlight(params_json, result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_RESTART) == 0) {
+        if (xTaskCreate(restart_task, "node_restart", 2048, NULL, 5, NULL) != pdPASS) return ESP_ERR_NO_MEM;
+        snprintf(result_json, result_size, "{\"command\":\"device.restart\",\"scheduled\":true}");
+        return ESP_OK;
+    }
     return ESP_ERR_NOT_FOUND;
 }
