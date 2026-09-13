@@ -240,6 +240,8 @@ void system_ui_delete_home_locked(void)
     s_ui.status_label = NULL;
     s_ui.time_label = NULL;
     s_ui.date_label = NULL;
+    s_ui.notice_label = NULL;
+    s_ui.notice_icon = NULL;
 }
 
 esp_err_t system_ui_set_network_status(bool sta_connected, const char *ap_ssid)

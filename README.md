@@ -1,222 +1,123 @@
-<div align="center">
+# ESP-OpenClaw-Node
 
-  <a href="https://github.com/opera163zuo/esp-openclaw">
-    <img src="./docs/src/assets/logos/logo.svg" alt="ESP-OpenClaw logo" width="45%" />
-  </a>
+面向 **M5Stack StickS3 / ESP32-S3** 的 OpenClaw Native Node 固件项目。
 
-  <h1>ESP-OpenClaw 🦞</h1>
-  <h3>面向 ESP32 的 OpenClaw Native Node 与边缘 Agent 项目</h3>
-
-  <p>
-    <a href="https://github.com/opera163zuo/esp-openclaw">
-      <img src="https://img.shields.io/badge/platform-ESP32--S3-blue?style=flat-square" alt="ESP32-S3" />
-    </a>
-    <a href="./LICENSE">
-      <img src="https://img.shields.io/github/license/opera163zuo/esp-openclaw?style=flat-square" alt="License" />
-    </a>
-  </p>
-
-  <a href="./README_EN.md">English</a>
-  |
-  <a href="https://esp-claw.com/">ESP-Claw 文档</a>
-  |
-  <a href="./application/edge_agent/README.md">构建说明</a>
-
-</div>
-
-## 项目简介
-
-ESP-OpenClaw 是基于 Espressif ESP-Claw 改造的 OpenClaw Native Node 项目，当前重点适配 **M5Stack StickS3**。
-
-项目采用明确的分层架构：
+本项目将 OpenClaw Gateway 的 Agent、LLM、Memory、权限和通信路由与 ESP32 设备执行层分离：
 
 ```text
 OpenClaw Gateway
-  ├─ Agent / LLM / Memory / 权限 / 通信路由
-  └─ 通过 WebSocket 调用 Native Node
+  ├─ Agent / LLM / Memory / 权限 / 路由
+  └─ WebSocket 调用 Native Node
         ↓ Wi‑Fi
 M5Stack StickS3 / ESP32-S3
-  └─ 设备身份、硬件能力和固定命令执行
+  └─ 设备身份、显示、音频和受限硬件命令
 ```
 
-ESP32 不运行 OpenClaw Agent、LLM 或社交平台逻辑。复杂理解、任务编排、权限控制和通信路由由 Gateway 负责；设备只执行经过声明和限制的命令。
+ESP32 不运行 Agent 或 LLM，只执行固件中明确声明、校验和限制的设备命令。
 
-> 本仓库仍保留 ESP-Claw 原有的边缘 Agent、Capability、Lua、Memory 和配置系统。Native Node 是本项目新增并已在 M5Stack StickS3 上真实验收的主要方向。
+## 项目名称
 
-## 当前状态
+- 项目名称：**ESP-OpenClaw-Node**
+- 当前硬件：M5Stack StickS3
+- 芯片：ESP32-S3-PICO-1
+- 屏幕：ST7789 SPI，135×240，RGB565
+- Flash / PSRAM：8 MB / 8 MB
+- 协议：OpenClaw Native Node protocol v4，设备认证使用 v3 Ed25519 Device Auth
 
-### 已完成并在真实设备上验证
+## 当前已实现
 
-- OpenClaw Native Node WebSocket 连接与协议 v4 握手
-- `connect.challenge` 与 v3 Ed25519 Device Auth
+### Native Node
+
+- WebSocket 连接、`connect.challenge` 和 `hello-ok`
+- Monocypher Ed25519 身份
 - NVS 持久化设备身份
 - 基于原始 Ed25519 公钥 SHA-256 的稳定 Node ID
-- Gateway 配对、命令面批准和 `node.invoke` 调用
-- M5Stack StickS3：ESP32-S3-PICO-1、8 MB Flash、8 MB PSRAM
-- 设备信息与状态：
-  - `device.info`
-  - `device.status`
-  - `device.network`
-  - `device.button.status`
-- 显示与声音：
-  - `device.backlight`
-  - `device.screen.clear`
-  - `audio.volume`
-  - `audio.tone`
-- 设备控制：
-  - `device.restart`
-- 受限文件能力：
-  - `node.files.list`
-  - `node.files.read`
-  - `node.files.write`
-  - `node.files.delete`
-  - `node.files.copy`
-  - `node.files.move`
-- 受限 Lua 脚本与任务：
-  - `node.lua.run`
-  - `node.lua.run_async`
-  - `node.lua.jobs`
-  - `node.lua.job`
-  - `node.lua.stop`
-  - `node.lua.stop_all`
+- Gateway 配对、命令面批准和 `node.invoke`
+- `device.info`、`device.status`、`device.network`
+- `device.button.status`、`device.backlight`、`device.restart`
+- `audio.volume`、`audio.tone`
 
-以上命令已通过真实 M5StickS3 与 OpenClaw Gateway 的端到端调用验证。文件测试使用临时文件并已清理；Lua 测试使用设备内已有脚本，不是任意 Lua 字符串执行。
+### 显示
 
-### 当前未完成
+- 复用原工程的 LVGL + Tiny TTF + NotoSansSC 中文字体链路
+- `device.screen.text` 中文通知显示
+- `device.screen.fullscreen.enter`
+- `device.screen.fullscreen.text`
+- `device.screen.fullscreen.clear`
+- `device.screen.fullscreen.exit`
+- 中文文本自动换行
+- 对天气和常用符号提供受限图形替换，避免字体缺字显示方框
+- 所有 LVGL 对象操作通过 System UI 线程执行
 
-- BLE HID Native Node 命令、电脑端蓝牙配对及键盘/鼠标实际输入验收
-- `cap_cli` 的 Native Node 受限接入
+当前稳定显示方向是**竖屏**。`orientation: landscape` 尚未实现真正的 LCD 横屏切换，不能把命令接受或 API 返回当作横屏完成。真正横屏需要同步重建 ST7789 panel、LVGL adapter、frame buffer、flush 坐标和 UI 页面。
+
+### 受限文件与 Lua
+
+- `node.files.list/read/write/delete/copy/move`
+- `node.lua.run/run_async/jobs/job/stop/stop_all`
+- 文件路径限制在既有沙箱内；拒绝 `..` 路径穿越
+- `/fatfs` 可写，`/system` 只读
+- Lua 只能运行设备上已有且通过路径校验的脚本
+
+## 明确未实现
+
+- 稳定的运行时横屏/竖屏切换
+- BLE HID 的真实配对及主机键盘/鼠标输入验收
 - 摄像头、截图、屏幕读取和完整电脑控制
-- 任意 Shell、任意终端、任意桌面脚本
+- 任意 Shell、任意终端和任意桌面脚本
 - Native Node 录音、音频流、STT/TTS 和连续语音对话
 - OTA 固件升级、远程刷写和生产级密钥轮换
-- 更完整的屏幕文字/UI Native Node API
 
-当前不能把 BLE HID、截图、远程桌面或完整电脑控制称为已实现功能。
+## 构建与烧录
 
-## Native Node 命令参数示例
-
-### 播放提示音
-
-```json
-{
-  "frequencyHz": 880,
-  "durationMs": 250
-}
-```
-
-限制：频率 `100–4000 Hz`，时长 `1–2000 ms`。
-
-### 复制和移动文件
-
-```json
-{
-  "src_path": "/fatfs/source.txt",
-  "dst_path": "/fatfs/copy.txt"
-}
-```
-
-复制和移动使用 `src_path` / `dst_path`，不是 `source` / `destination`。
-
-### 执行设备内已有 Lua 脚本
-
-```json
-{
-  "path": "/system/skills/builtin_lua_modules/scripts/builtin/test/system_info.lua",
-  "timeout_ms": 5000
-}
-```
-
-异步任务示例：
-
-```json
-{
-  "path": "/system/skills/builtin_lua_modules/scripts/builtin/test/system_info.lua",
-  "timeout_ms": 5000,
-  "name": "protocol-test",
-  "log_bytes": 2048
-}
-```
-
-## 安全边界
-
-- 文件命令只接受绝对路径。
-- 禁止包含 `..` 的路径穿越。
-- `/fatfs` 是可写数据区；`/system` 是只读固件区。
-- 文件能力保留原有沙箱和大小限制。
-- Lua 只能运行设备上已有并通过路径校验的脚本。
-- 不开放 `shell.exec`、`terminal.exec`、`lua.eval` 或任意命令字符串。
-- 不把 Native Node 调用结果当成完整电脑控制结果。
-- Gateway URL、Token、Wi‑Fi 密码、私钥和其他凭据不得提交 Git。
-
-## 硬件与构建
-
-已验证环境：
-
-```text
-Board: M5Stack StickS3
-MCU: ESP32-S3-PICO-1
-Flash: 8 MB
-PSRAM: 8 MB
-ESP-IDF: 5.5.4
-Serial: /dev/cu.usbmodem101（示例）
-```
-
-准备 ESP-IDF 后构建：
+已验证环境：ESP-IDF 5.5.4、Python 3.9.6。
 
 ```bash
+export IDF_PATH="$HOME/esp/esp-idf"
+export IDF_PYTHON_ENV_PATH="$HOME/.espressif/python_env/idf5.5_py3.9_env"
+source "$IDF_PATH/export.sh"
 cd application/edge_agent
-source "$HOME/esp/esp-idf/export.sh"
 idf.py set-target esp32s3
 idf.py reconfigure
 idf.py build
-```
-
-烧录前请确认目标板、芯片型号、Flash、PSRAM 和串口。烧录：
-
-```bash
 idf.py -p /dev/cu.usbmodem101 flash
 ```
 
-Native Node 默认关闭连接配置。生产或安全固件应保持：
+烧录前必须再次确认目标板、芯片、Flash、PSRAM 和串口。成功烧录不等于功能验收；必须另外确认启动日志、Gateway 连接、命令面批准、实际调用和实体屏幕效果。
+
+## 安全边界
+
+- 默认固件不包含 Gateway URL 和 Token：
 
 ```c
 #define OPENCLAW_NODE_GATEWAY_URL ""
 #define OPENCLAW_NODE_GATEWAY_TOKEN ""
 ```
 
-真实 Gateway 联调需要临时使用本地未提交配置，完成后恢复空 URL/Token，并将 Gateway 恢复为 loopback 监听。
+- 联调凭据只允许使用本机临时覆盖，不得提交 Git。
+- Gateway Token、Wi‑Fi 密码、API key、私钥和连接字符串不得出现在日志、文档或提交中。
+- 联调结束后恢复空 URL/Token，并将 Gateway 恢复为 `bind=loopback`。
+- 不开放 `shell.exec`、`terminal.exec`、`lua.eval` 或任意命令字符串。
 
-## 代码结构
+## 目录
 
 ```text
 components/openclaw_node/                 Native Node 传输、身份和命令分发
-components/claw_capabilities/cap_files/   受限文件 Capability
-components/claw_capabilities/cap_lua/     Lua 脚本与异步任务 Capability
-components/claw_capabilities/cap_cli/     原有受限 ESP Console Capability
-application/edge_agent/                   M5Stack StickS3 应用与板级集成
-components/lua_modules/                   原有 Lua 模块
+components/common/system_ui/               LVGL System UI 与中文显示
+components/common/display_service/         LCD、LVGL adapter 和显示生命周期
+components/claw_capabilities/cap_files/   受限文件能力
+components/claw_capabilities/cap_lua/     Lua 脚本与任务能力
+application/edge_agent/                   ESP-IDF 应用和 M5Stack StickS3 集成
 ```
 
-## GitHub 修改记录
+## 验收原则
 
-本项目的 Native Node 主要修改已提交到 `master`，包括：
+`accepted: true`、`shown: true` 和 `cleared: true` 只代表命令被固件接受，不代表实体屏幕已经正确显示。显示功能必须用真实设备照片或视频确认，并分别记录 API、烧录、连接、命令调用和视觉结果。
 
-- Native Node WebSocket 传输和 OpenClaw 握手
-- Monocypher Ed25519 身份与 NVS 持久化
-- 设备信息、状态、网络、按键、背光、重启、音频和屏幕命令
-- 受限文件和 Lua Capability 的 Native Node 映射
-- ESP-IDF Component Manifest 与依赖修复
-- 真实 M5StickS3 / Gateway 联调修复
+## 上游说明
 
-临时 Gateway URL、Token 和 Wi‑Fi 凭据不在 GitHub 中。
-
-## 上游项目与致谢
-
-本项目基于 [Espressif ESP-Claw](https://github.com/espressif/esp-claw)；感谢其 Agent Loop、Capability、Lua、Memory、板级支持和文档工作。
-
-Native Node 协议方向受到 [OpenClaw](https://github.com/openclaw/openclaw) 启发。
+本项目源自 Espressif 的 ESP-Claw 代码基础，但当前仓库产品名称、GitHub 说明和 Native Node 方向统一为 **ESP-OpenClaw-Node**。原项目的品牌 Logo 和宣传图不作为本项目的产品标识。
 
 ## 许可证
 
-请参阅 [`LICENSE`](./LICENSE)。
+见 [`LICENSE`](./LICENSE)。

@@ -36,6 +36,11 @@ static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME,
     OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE,
     OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR,
+    OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_TEXT,
+    OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_ENTER,
+    OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_TEXT,
+    OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_CLEAR,
+    OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_EXIT,
     OPENCLAW_NODE_COMMAND_FILES_READ,
     OPENCLAW_NODE_COMMAND_FILES_WRITE,
     OPENCLAW_NODE_COMMAND_FILES_DELETE,
@@ -261,6 +266,56 @@ static esp_err_t screen_clear(char *out, size_t size)
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
+static esp_err_t screen_text(const char *params_json, char *out, size_t size)
+{
+    cJSON *params = cJSON_Parse(params_json ? params_json : "{}");
+    cJSON *text_item = params ? cJSON_GetObjectItem(params, "text") : NULL;
+    const char *text = cJSON_GetStringValue(text_item);
+    esp_err_t err;
+    if (!text || !cJSON_IsString(text_item) || strlen(text) > 192) {
+        cJSON_Delete(params);
+        return ESP_ERR_INVALID_ARG;
+    }
+    err = system_ui_show_text(text);
+    cJSON_Delete(params);
+    if (err != ESP_OK) return err;
+    int n = snprintf(out, size, "{\"command\":\"device.screen.text\",\"shown\":true}");
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
+static esp_err_t screen_fullscreen(const char *command, const char *params_json, char *out, size_t size)
+{
+    esp_err_t err;
+    cJSON *params = NULL;
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_ENTER) == 0) {
+        err = system_ui_fullscreen_enter();
+    } else if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_CLEAR) == 0) {
+        err = system_ui_fullscreen_clear();
+    } else if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_EXIT) == 0) {
+        err = system_ui_fullscreen_exit();
+    } else {
+        params = cJSON_Parse(params_json ? params_json : "{}");
+        cJSON *item = params ? cJSON_GetObjectItem(params, "text") : NULL;
+        cJSON *orientation_item = params ? cJSON_GetObjectItem(params, "orientation") : NULL;
+        const char *text = cJSON_GetStringValue(item);
+        const char *orientation = cJSON_GetStringValue(orientation_item);
+        if (!text || !cJSON_IsString(item) || strlen(text) > 192 ||
+            (orientation && strcmp(orientation, "portrait") != 0 && strcmp(orientation, "landscape") != 0)) {
+            cJSON_Delete(params);
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (orientation && strcmp(orientation, "landscape") == 0) {
+            cJSON_Delete(params);
+            return ESP_ERR_NOT_SUPPORTED;
+        }
+        err = system_ui_fullscreen_text(text, orientation ? orientation : "portrait");
+    }
+    cJSON_Delete(params);
+    if (err != ESP_OK) return err;
+    int n = snprintf(out, size, "{\"command\":\"%s\",\"accepted\":true}", command);
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
+
 esp_err_t openclaw_node_device_command(const char *command,
                                        const char *params_json,
                                        char *result_json,
@@ -283,6 +338,13 @@ esp_err_t openclaw_node_device_command(const char *command,
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_VOLUME) == 0) return audio_volume(params_json, result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_AUDIO_TONE) == 0) return audio_tone(params_json, result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_CLEAR) == 0) return screen_clear(result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_TEXT) == 0) return screen_text(params_json, result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_ENTER) == 0 ||
+        strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_TEXT) == 0 ||
+        strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_CLEAR) == 0 ||
+        strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_EXIT) == 0) {
+        return screen_fullscreen(command, params_json, result_json, result_size);
+    }
     const char *cap = map_native_cap(command);
     if (cap) return call_existing_cap(cap, params_json, result_json, result_size);
     return ESP_ERR_NOT_FOUND;

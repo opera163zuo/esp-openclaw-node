@@ -147,6 +147,9 @@ void system_ui_create_font_locked(const char *font_path, uint32_t font_size)
         ESP_LOGW(SYSTEM_UI_TAG, "ui font load failed: %s", s_ui.font_path);
         return;
     }
+    s_ui.notice_font = lv_tiny_ttf_create_data_ex(font_data, font_data_size, 16,
+                                                   LV_FONT_KERNING_NORMAL,
+                                                   LV_TINY_TTF_CACHE_GLYPH_CNT);
     uint32_t clock_font_size = (uint32_t)system_ui_clamp_i32(system_ui_short_side_from(s_ui.width, s_ui.height) * 22 / 100, 48, SYSTEM_UI_CLOCK_FONT_SIZE);
     s_ui.clock_font = lv_tiny_ttf_create_data_ex(font_data,
                                                  font_data_size,
@@ -178,6 +181,10 @@ void system_ui_destroy_font_locked(void)
     if (s_ui.font) {
         lv_tiny_ttf_destroy(s_ui.font);
         s_ui.font = NULL;
+    }
+    if (s_ui.notice_font) {
+        lv_tiny_ttf_destroy(s_ui.notice_font);
+        s_ui.notice_font = NULL;
     }
 #endif
     free(s_ui.font_data);

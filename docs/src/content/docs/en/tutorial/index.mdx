@@ -1,70 +1,76 @@
 ---
-title: Hello👋, welcome to ESP-Claw!
-description: An AI agent framework for IoT devices that defines device behavior through conversation.
+title: ESP-OpenClaw-Node documentation
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
-import { LinkCard } from 'starlight-theme-nova/components'
-import { LinkButton } from 'starlight-theme-nova/components'
+# ESP-OpenClaw-Node
 
-import ClawAnimationUrl from "@/assets/logos/claw-animation.svg?url";
-import ClawBreadboardPhotoJpg from "@/assets/images/claw-breadboard-photo.jpg?url";
-import ClawBreadboardPhotoWebp from "@/assets/images/claw-breadboard-photo.webp?url";
+OpenClaw Native Node firmware for M5Stack StickS3 / ESP32-S3.
 
-<img src={ClawAnimationUrl} alt="ESP-Claw" width="50%" style="display: block; margin: 0 auto;" />
+The Gateway runs the Agent, LLM, memory, authorization, and routing. The device provides a bounded, authenticated hardware execution layer over WebSocket.
 
-**ESP-Claw** is a **Chat Coding** AI agent framework for IoT devices. It defines device behavior through conversation and completes the full loop of sensing, reasoning, decision-making, and execution locally on Espressif chips.
+## Current status
 
-<CardGrid stagger>
-  <Card title="Chat to Build" icon="comment">
-    Define device behavior through IM chat + dynamic Lua loading, with generated logic persisted as local deterministic rules
-  </Card>
-  <Card title="Event-Driven" icon="random">
-    Devices report events proactively with millisecond-level response; if no rule matches, call LLM automatically with cloud-edge collaboration
-  </Card>
-  <Card title="Bi-Directional MCP" icon="puzzle">
-    Devices act as both MCP Server and MCP Client, callable by external Agents while also calling external services proactively
-  </Card>
-  <Card title="Local Memory" icon="document">
-    Structured long-term memory with lightweight summary-tag retrieval, keeping privacy local
-  </Card>
-</CardGrid>
+- Native Node WebSocket, challenge handshake, Ed25519 Device Auth, pairing, and command approval: verified on real M5Stack StickS3
+- Device information, status, network, button, backlight, restart, audio, sandboxed file, and Lua commands: verified
+- LVGL + Tiny TTF + NotoSansSC Chinese rendering: verified
+- Chinese wrapping and bounded weather-symbol graphic mapping: implemented; physical visual acceptance remains separate
+- Stable portrait display: verified
+- Runtime landscape switching: **not implemented**
 
-## ESP-Claw vs Traditional IoT
+## Important display note
 
-| **Dimension** | **Traditional IoT (Cloud-Centric)** | **ESP-Claw (Edge AI)** |
-| --- | --- | --- |
-| **Processing logic** | Preset static rules (If-This-Then-That) | LLM dynamic decision-making + Lua deterministic rules |
-| **Execution engine** | Rule engine | LLM + Lua + Router (three-tier event handling) |
-| **Control center** | Cloud server | Edge node (ESP chip) |
-| **Device protocol** | MQTT / Matter / proprietary SDK | MCP as a unified language + multi-protocol bridging |
-| **Memory management** | Cloud data storage | Local structured memory (JSONL + tags) |
-| **Interaction model** | App / control panel | IM chat (Telegram / WeChat / Feishu) |
-| **Intelligence** | Preset automation | LLM + local rules (continuous evolution) |
+The stable display orientation is portrait. An accepted `orientation: landscape` parameter is not evidence of physical rotation. A correct landscape implementation must rebuild the ST7789 panel, LVGL adapter, frame buffers, flush geometry, and UI lifecycle together.
 
-## Get Started
+## Display commands
 
-This tutorial walks you from zero to a working ESP32-S3 breadboard build, then flashes the latest ESP-Claw firmware.
+```text
+device.screen.text
+device.screen.clear
+device.screen.fullscreen.enter
+device.screen.fullscreen.text
+device.screen.fullscreen.clear
+device.screen.fullscreen.exit
+```
 
-<picture>
-    <source srcset={ClawBreadboardPhotoWebp} type="image/webp" />
-    <img src={ClawBreadboardPhotoJpg} alt="ESP-Claw Breadboard" style="display: block; margin: 0 auto;" />
-</picture>
+`accepted`, `shown`, and `cleared` only mean that firmware accepted a request. Text bounds, fonts, graphic replacement, fullscreen exit, and corruption must be checked with a physical photo or video.
 
-<CardGrid>
-  <LinkCard title="Breadboard ESP-Claw" href="@lang/tutorial/assemble" description="BOM list and assembly" />
-  <LinkCard title="Get Started" href="@lang/tutorial/get-started" description="Already have hardware? Start flashing and setup here" />
-</CardGrid>
+## Build
 
-## Development Plan
+Verified with ESP-IDF 5.5.4 and Python 3.9.6:
 
-ESP-Claw is still under active development. Feel free to open an issue to report problems or request features.
-You can also share your ideas through our [online survey (in Chinese)](https://fcn5wbhnyubf.feishu.cn/share/base/form/shrcndYcjbGFY1ymttTSyYoGIPh).
+```bash
+export IDF_PATH="$HOME/esp/esp-idf"
+export IDF_PYTHON_ENV_PATH="$HOME/.espressif/python_env/idf5.5_py3.9_env"
+source "$IDF_PATH/export.sh"
+cd application/edge_agent
+idf.py set-target esp32s3
+idf.py reconfigure
+idf.py build
+idf.py -p /dev/cu.usbmodem101 flash
+```
 
-[Click here to view our TODO List (in Chinese)](https://fcn5wbhnyubf.feishu.cn/wiki/SRlgwWUYei4WmykU8uMcUtzTnFf?table=tblWSgzWcyW7jv7B&view=vewaP9B0KX),
-and vote for the features or issues you care about. That helps us prioritize them sooner.
+Verify the M5Stack StickS3, ESP32-S3-PICO-1, 8 MB Flash, 8 MB PSRAM, and serial port before flashing.
 
-## Documentation Map
+## Security
 
-- **Start from user workflows:** [Get Started](@lang/tutorial/get-started) → [Web Config](@lang/tutorial/web-config) / [Console Usage](@lang/reference-project/console-usage) → [FAQ](@lang/tutorial/faq)
-- **Start from developer workflows:** [Build and Flash from Source](@lang/reference-project/build-from-source), then [Project Architecture](@lang/reference-project/), [Core](@lang/reference-core/), and [Capabilities](@lang/reference-cap/)
+The default firmware has no Gateway credentials:
+
+```c
+#define OPENCLAW_NODE_GATEWAY_URL ""
+#define OPENCLAW_NODE_GATEWAY_TOKEN ""
+```
+
+Temporary integration credentials must stay in a local uncommitted overlay. Never put Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. After testing, restore empty URL/token settings and Gateway `bind=loopback`.
+
+## Repository layout
+
+```text
+components/openclaw_node/                 Native Node transport, identity, and dispatch
+components/common/system_ui/               LVGL System UI and Unicode display
+components/common/display_service/         LCD, LVGL adapter, and display lifecycle
+components/claw_capabilities/cap_files/   Sandboxed file capability
+components/claw_capabilities/cap_lua/     Lua script and job capability
+application/edge_agent/                   ESP-IDF app and StickS3 integration
+```
+
+See the repository root [`README.md`](../../../../README.md) for the complete command, protocol, security, and acceptance documentation.

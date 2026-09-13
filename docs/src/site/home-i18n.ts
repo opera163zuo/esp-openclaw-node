@@ -71,10 +71,10 @@ export interface HomeContent {
 }
 
 const en: HomeContent = {
-  metaTitle: "ESP-Claw — Chat-as-Coding Edge Agent Framework for IoT | by Espressif",
+  metaTitle: "ESP-OpenClaw-Node — Chat-as-Coding Edge Agent Framework for IoT | by Espressif",
   metaDescription:
-    "ESP-Claw, Espressif's \"Chat-as-Coding\" Edge Agent Framework for IoT.",
-  terminalTitle: "ESP-Claw — interactive demo",
+    "ESP-OpenClaw-Node, Espressif's \"Chat-as-Coding\" Edge Agent Framework for IoT.",
+  terminalTitle: "ESP-OpenClaw-Node — interactive demo",
   asciinemaLabel: "Asciinema Player Demo",
   heroBadge: "Local · Chat Coding · Edge Agent",
   heroDescription: "<b>Chat Coding</b> Edge AI Agent Framework for <b>IoT</b>",
@@ -99,7 +99,7 @@ const en: HomeContent = {
     {
       title: "Plug and Play",
       subtitle: "MCP Unifies Everything",
-      detail: "Devices self-declare capabilities via MCP, replacing per-device adapters. ESP-Claw acts as both MCP Server and Client—exposing hardware to agents while calling external services.",
+      detail: "Devices self-declare capabilities via MCP, replacing per-device adapters. ESP-OpenClaw-Node acts as both MCP Server and Client—exposing hardware to agents while calling external services.",
     },
     {
       title: "Grows with You",
@@ -109,8 +109,8 @@ const en: HomeContent = {
   ],
   whatsMissingAfterIoTTitle: "What's missing after IoT?",
   whatsMissingAfterIoTP1: "Traditional IoT stops at simple connectivity. Devices can connect but not think; execute but not decide. Heavy cloud reliance and rigid rules keep them purely passive.",
-  whatsMissingAfterIoTP2: "ESP-Claw pushes the Agent Runtime directly to the edge, transforming ESP chips from passive \"execution nodes\" into active \"decision centers\" that perceive, reason, and act locally—breaking free from cloud dependency.",
-  techAdvantagesTitle: "Technological Advantages of ESP-Claw",
+  whatsMissingAfterIoTP2: "ESP-OpenClaw-Node pushes the Agent Runtime directly to the edge, transforming ESP chips from passive \"execution nodes\" into active \"decision centers\" that perceive, reason, and act locally—breaking free from cloud dependency.",
+  techAdvantagesTitle: "Technological Advantages of ESP-OpenClaw-Node",
   featAndDemos: [
     {
       title: "No Programming Required, \"Chat as Creation\"",
@@ -149,7 +149,7 @@ const en: HomeContent = {
       posterTime: 15,
     },
   ],
-  videoCasesTitle: "How They Use ESP-Claw",
+  videoCasesTitle: "How They Use ESP-OpenClaw-Node",
   videoCases: [
     {
       thumbnail: VideoBV1kookBYEi7Thumbnail,
@@ -168,17 +168,17 @@ const en: HomeContent = {
     },
     {
       thumbnail: VideoYoutubeD5VSzg2dSYwThumbnail,
-      title: "ESP-Claw on M5Stack StickS3 & CoreS3",
+      title: "ESP-OpenClaw-Node on M5Stack StickS3 & CoreS3",
       videoUrl: "https://www.youtube.com/watch?v=d5VSzg2dSYw",
     }
   ],
 };
 
 const zhCn: HomeContent = {
-  metaTitle: "ESP-Claw — 「聊天造物」物联网 AI 智能体框架 | 乐鑫出品",
+  metaTitle: "ESP-OpenClaw-Node — 「聊天造物」物联网 AI 智能体框架 | 乐鑫出品",
   metaDescription:
-    "ESP-Claw, 乐鑫推出的「聊天造物」物联网 AI 智能体框架。",
-  terminalTitle: "ESP-Claw — 交互演示",
+    "ESP-OpenClaw-Node, 乐鑫推出的「聊天造物」物联网 AI 智能体框架。",
+  terminalTitle: "ESP-OpenClaw-Node — 交互演示",
   asciinemaLabel: "Asciinema 播放器演示",
   heroBadge: "本地 · 聊天造物 · 边缘智能体",
   heroDescription: "「聊天造物」物联网 AI 智能体框架",
@@ -203,7 +203,7 @@ const zhCn: HomeContent = {
     {
       title: "即插即用",
       subtitle: "MCP 协议统一万物",
-      detail: "设备通过 MCP 自声明能力，取代逐一适配。ESP-Claw 同时作为 MCP Server 和 Client，向 Agent 暴露硬件并调用外部服务。",
+      detail: "设备通过 MCP 自声明能力，取代逐一适配。ESP-OpenClaw-Node 同时作为 MCP Server 和 Client，向 Agent 暴露硬件并调用外部服务。",
     },
     {
       title: "越用越懂你",
@@ -213,8 +213,8 @@ const zhCn: HomeContent = {
   ],
   whatsMissingAfterIoTTitle: "万物互联之后，还缺什么？",
   whatsMissingAfterIoTP1: "传统 IoT 仅停留在连接层——设备能联网却不能思考，能执行却不能决策；高度依赖云端，使 IoT 始终停留在被动响应阶段。",
-  whatsMissingAfterIoTP2: "ESP-Claw 将 Agent 运行时直接下沉至设备端，让 ESP 芯片化身为主动的“决策中心”——在本地完成感知、推理与决策的闭环，大幅减少云端依赖。",
-  techAdvantagesTitle: "ESP-Claw 的技术优势",
+  whatsMissingAfterIoTP2: "ESP-OpenClaw-Node 将 Agent 运行时直接下沉至设备端，让 ESP 芯片化身为主动的“决策中心”——在本地完成感知、推理与决策的闭环，大幅减少云端依赖。",
+  techAdvantagesTitle: "ESP-OpenClaw-Node 的技术优势",
   featAndDemos: [
     {
       title: "无须编程，「聊天造物」",
@@ -253,7 +253,7 @@ const zhCn: HomeContent = {
       posterTime: 15,
     },
   ],
-  videoCasesTitle: "Ta 们在这样使用 ESP-Claw",
+  videoCasesTitle: "Ta 们在这样使用 ESP-OpenClaw-Node",
   videoCases: [
     {
       thumbnail: VideoBV1kookBYEi7Thumbnail,
@@ -267,12 +267,12 @@ const zhCn: HomeContent = {
     },
     {
       thumbnail: VideoBV1QiohBEEt5Thumbnail,
-      title: "龙虾！香！ESP-Claw实战演示",
+      title: "龙虾！香！ESP-OpenClaw-Node实战演示",
       videoUrl: "https://www.bilibili.com/video/BV1QiohBEEt5",
     },
     {
       thumbnail: VideoBV1UX9rBiEZ9TThumbnail,
-      title: "乐鑫龙虾 ESP-Claw 专属开发套件介绍",
+      title: "乐鑫龙虾 ESP-OpenClaw-Node 专属开发套件介绍",
       videoUrl: "https://www.bilibili.com/video/BV1UX9rBiEZ9",
     }
   ],

@@ -1,221 +1,121 @@
-<div align="center">
+# ESP-OpenClaw-Node
 
-  <a href="https://github.com/opera163zuo/esp-openclaw">
-    <img src="./docs/src/assets/logos/logo.svg" alt="ESP-OpenClaw logo" width="45%" />
-  </a>
+OpenClaw Native Node firmware for **M5Stack StickS3 / ESP32-S3**.
 
-  <h1>ESP-OpenClaw 🦞</h1>
-  <h3>OpenClaw Native Node and Edge Agent project for ESP32</h3>
-
-  <p>
-    <a href="https://github.com/opera163zuo/esp-openclaw">
-      <img src="https://img.shields.io/badge/platform-ESP32--S3-blue?style=flat-square" alt="ESP32-S3" />
-    </a>
-    <a href="./LICENSE">
-      <img src="https://img.shields.io/github/license/opera163zuo/esp-openclaw?style=flat-square" alt="License" />
-    </a>
-  </p>
-
-  <a href="./README.md">简体中文</a>
-  |
-  <a href="https://esp-claw.com/en/">ESP-Claw documentation</a>
-  |
-  <a href="./application/edge_agent/README.md">Build guide</a>
-
-</div>
-
-## Overview
-
-ESP-OpenClaw is an OpenClaw Native Node project based on Espressif ESP-Claw, currently focused on the **M5Stack StickS3**.
-
-The project uses a clear layered architecture:
+The project separates the OpenClaw Gateway from the embedded execution layer:
 
 ```text
 OpenClaw Gateway
-  ├─ Agent / LLM / Memory / policy / communication routing
+  ├─ Agent / LLM / Memory / authorization / routing
   └─ Invokes the Native Node over WebSocket
         ↓ Wi-Fi
 M5Stack StickS3 / ESP32-S3
-  └─ Device identity, hardware capabilities, and fixed commands
+  └─ Device identity, display, audio, and bounded hardware commands
 ```
 
-The ESP32 does not run the OpenClaw Agent, LLM, or social-platform logic. The Gateway handles understanding, orchestration, authorization, and routing; the device executes only declared and bounded commands.
+The ESP32 does not run the Agent or LLM. It executes only explicitly declared and validated firmware commands.
 
-> This repository still contains ESP-Claw's original edge-Agent, Capability, Lua, Memory, and configuration systems. Native Node is the main added direction and has been tested end to end on an M5Stack StickS3.
+## Project identity
 
-## Current status
+- Project name: **ESP-OpenClaw-Node**
+- Target board: M5Stack StickS3
+- MCU: ESP32-S3-PICO-1
+- Display: ST7789 SPI, 135×240, RGB565
+- Flash / PSRAM: 8 MB / 8 MB
+- Protocol: OpenClaw Native Node protocol v4 with v3 Ed25519 Device Auth
 
-### Implemented and verified on real hardware
+## Implemented
 
-- OpenClaw Native Node WebSocket connection and protocol v4 handshake
-- `connect.challenge` and v3 Ed25519 Device Auth
-- Persistent device identity stored in NVS
+### Native Node
+
+- WebSocket transport, `connect.challenge`, and `hello-ok`
+- Monocypher Ed25519 device identity
+- NVS-persisted identity
 - Stable Node ID derived from SHA-256 of the raw Ed25519 public key
-- Gateway pairing, command-surface approval, and `node.invoke` calls
-- M5Stack StickS3: ESP32-S3-PICO-1, 8 MB Flash, 8 MB PSRAM
-- Device information and status:
-  - `device.info`
-  - `device.status`
-  - `device.network`
-  - `device.button.status`
-- Display and audio:
-  - `device.backlight`
-  - `device.screen.clear`
-  - `audio.volume`
-  - `audio.tone`
-- Device control:
-  - `device.restart`
-- Sandboxed file capabilities:
-  - `node.files.list`
-  - `node.files.read`
-  - `node.files.write`
-  - `node.files.delete`
-  - `node.files.copy`
-  - `node.files.move`
-- Sandboxed Lua scripts and jobs:
-  - `node.lua.run`
-  - `node.lua.run_async`
-  - `node.lua.jobs`
-  - `node.lua.job`
-  - `node.lua.stop`
-  - `node.lua.stop_all`
+- Gateway pairing, command-surface approval, and `node.invoke`
+- `device.info`, `device.status`, and `device.network`
+- `device.button.status`, `device.backlight`, and `device.restart`
+- `audio.volume` and `audio.tone`
 
-These commands have been tested end to end with a physical M5StickS3 and an OpenClaw Gateway. File tests use temporary files and clean them up afterward. Lua execution runs existing device-side `.lua` files; it is not arbitrary Lua-string evaluation.
+### Display
 
-### Not implemented yet
+- Existing LVGL + Tiny TTF + NotoSansSC Chinese rendering path
+- `device.screen.text` for bounded Chinese notices
+- `device.screen.fullscreen.enter`
+- `device.screen.fullscreen.text`
+- `device.screen.fullscreen.clear`
+- `device.screen.fullscreen.exit`
+- Automatic line wrapping for Chinese text
+- Bounded weather/common-symbol graphic mapping to avoid missing-glyph boxes
+- All LVGL object operations run through the System UI task
 
-- BLE HID Native Node commands, host Bluetooth pairing, and keyboard/mouse input verification
-- A restricted Native Node bridge for `cap_cli`
-- Camera, screenshots, screen capture, and full computer control
-- Arbitrary shell, arbitrary terminal, or desktop scripting
-- Native Node recording, audio streaming, STT/TTS, and continuous voice conversation
-- OTA firmware updates, remote flashing, and production-grade key rotation
-- A more complete Native Node text/UI display API
+The stable display orientation is currently **portrait**. Runtime LCD landscape switching is not complete. An accepted `orientation: landscape` parameter or API response is not evidence of physical rotation. A correct implementation must rebuild the ST7789 panel path, LVGL adapter, frame buffers, flush geometry, and UI pages together.
 
-BLE HID, screenshots, remote desktop, and full computer control must not be described as implemented at this stage.
+### Sandboxed files and Lua
 
-## Native Node parameter examples
+- `node.files.list/read/write/delete/copy/move`
+- `node.lua.run/run_async/jobs/job/stop/stop_all`
+- Existing filesystem sandbox and `..` traversal rejection
+- `/fatfs` writable and `/system` read-only
+- Lua is limited to existing, path-validated device-side scripts
 
-### Play a tone
+## Not implemented
 
-```json
-{
-  "frequencyHz": 880,
-  "durationMs": 250
-}
-```
+- Stable runtime portrait/landscape switching
+- Verified BLE HID pairing and host keyboard/mouse input
+- Camera, screenshots, screen capture, or full computer control
+- Arbitrary shell, terminal, or desktop scripting
+- Native Node recording, audio streaming, STT/TTS, or continuous voice chat
+- OTA firmware updates, remote flashing, or production-grade key rotation
 
-Limits: `frequencyHz` from `100` to `4000`; `durationMs` from `1` to `2000`.
+## Build and flash
 
-### Copy and move a file
-
-```json
-{
-  "src_path": "/fatfs/source.txt",
-  "dst_path": "/fatfs/copy.txt"
-}
-```
-
-Copy and move require `src_path` and `dst_path`, not `source` and `destination`.
-
-### Run an existing device-side Lua script
-
-```json
-{
-  "path": "/system/skills/builtin_lua_modules/scripts/builtin/test/system_info.lua",
-  "timeout_ms": 5000
-}
-```
-
-Async example:
-
-```json
-{
-  "path": "/system/skills/builtin_lua_modules/scripts/builtin/test/system_info.lua",
-  "timeout_ms": 5000,
-  "name": "protocol-test",
-  "log_bytes": 2048
-}
-```
-
-## Security boundaries
-
-- File commands accept absolute paths only.
-- Paths containing `..` are rejected.
-- `/fatfs` is the writable data area; `/system` is the read-only firmware area.
-- The original file sandbox and size limits remain in force.
-- Lua may run only existing `.lua` files that pass path validation.
-- `shell.exec`, `terminal.exec`, `lua.eval`, and arbitrary command strings are not exposed.
-- A successful Native Node invocation is not the same as full computer control.
-- Gateway URLs, tokens, Wi-Fi passwords, private keys, and other credentials must never be committed to Git.
-
-## Hardware and build
-
-Verified environment:
-
-```text
-Board: M5Stack StickS3
-MCU: ESP32-S3-PICO-1
-Flash: 8 MB
-PSRAM: 8 MB
-ESP-IDF: 5.5.4
-Serial: /dev/cu.usbmodem101 (example)
-```
-
-After installing ESP-IDF:
+Verified toolchain: ESP-IDF 5.5.4 with Python 3.9.6.
 
 ```bash
+export IDF_PATH="$HOME/esp/esp-idf"
+export IDF_PYTHON_ENV_PATH="$HOME/.espressif/python_env/idf5.5_py3.9_env"
+source "$IDF_PATH/export.sh"
 cd application/edge_agent
-source "$HOME/esp/esp-idf/export.sh"
 idf.py set-target esp32s3
 idf.py reconfigure
 idf.py build
-```
-
-Before flashing, verify the target board, chip, Flash, PSRAM, and serial port. Flash with:
-
-```bash
 idf.py -p /dev/cu.usbmodem101 flash
 ```
 
-Native Node connection settings are disabled by default. A safe firmware should keep:
+Verify the board, chip, Flash, PSRAM, and serial port immediately before flashing. A successful flash is not feature acceptance; boot logs, Gateway reachability, command approval, invocation, and physical display output must be checked separately.
+
+## Security boundaries
+
+The default firmware has no Gateway credentials:
 
 ```c
 #define OPENCLAW_NODE_GATEWAY_URL ""
 #define OPENCLAW_NODE_GATEWAY_TOKEN ""
 ```
 
-A live Gateway test requires a temporary local, uncommitted configuration. After testing, restore empty URL/token settings and return the Gateway to loopback binding.
+Temporary integration credentials must stay in a local, uncommitted overlay. Never place Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. After live testing, restore empty URL/token settings and Gateway `bind=loopback`.
+
+Arbitrary `shell.exec`, `terminal.exec`, `lua.eval`, and arbitrary command strings are not exposed.
 
 ## Repository layout
 
 ```text
 components/openclaw_node/                 Native Node transport, identity, and dispatch
-components/claw_capabilities/cap_files/   Sandboxed file Capability
-components/claw_capabilities/cap_lua/     Lua script and async-job Capability
-components/claw_capabilities/cap_cli/     Original restricted ESP Console Capability
-application/edge_agent/                   M5Stack StickS3 app and board integration
-components/lua_modules/                   Original Lua modules
+components/common/system_ui/               LVGL System UI and Unicode display
+components/common/display_service/         LCD, LVGL adapter, and display lifecycle
+components/claw_capabilities/cap_files/   Sandboxed file capability
+components/claw_capabilities/cap_lua/     Lua script and job capability
+application/edge_agent/                   ESP-IDF app and StickS3 integration
 ```
 
-## GitHub changes
+## Acceptance rule
 
-The main Native Node changes have been committed to `master`, including:
+`accepted: true`, `shown: true`, and `cleared: true` only mean that the firmware accepted a request. Display behavior requires a physical photo or video. API acceptance, build, flash, connection, command invocation, and visual output are separate acceptance records.
 
-- Native Node WebSocket transport and OpenClaw handshake
-- Monocypher Ed25519 identity and NVS persistence
-- Device information, status, network, button, backlight, restart, audio, and screen commands
-- Native Node mappings for sandboxed file and Lua Capabilities
-- ESP-IDF Component Manifest and dependency fixes
-- Real M5Stack StickS3 / Gateway integration fixes
+## Upstream note
 
-Temporary Gateway URLs, tokens, and Wi-Fi credentials are not stored in GitHub.
-
-## Upstream and acknowledgements
-
-This project is based on [Espressif ESP-Claw](https://github.com/espressif/esp-claw). Thanks for its Agent Loop, Capability, Lua, Memory, board support, and documentation work.
-
-The Native Node direction is inspired by [OpenClaw](https://github.com/openclaw/openclaw).
+The repository originated from Espressif ESP-Claw code, but its product name, GitHub documentation, and Native Node direction are now unified as **ESP-OpenClaw-Node**. The original project's brand logos and promotional graphics are not used as this project's product identity.
 
 ## License
 

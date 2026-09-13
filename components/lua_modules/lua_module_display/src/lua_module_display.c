@@ -212,8 +212,34 @@ static int lua_display_init(lua_State *L)
         (esp_lcd_panel_io_handle_t)lua_display_opt_lightuserdata_arg(L, 2);
     int lcd_width = lua_display_check_integer_arg(L, 3, "lcd_width");
     int lcd_height = lua_display_check_integer_arg(L, 4, "lcd_height");
-    display_hal_panel_if_t panel_if = lua_display_parse_panel_if(L, 5);
-    display_hal_pixel_format_t pixel_format = lua_display_parse_pixel_format(L, 6);
+    display_hal_panel_if_t panel_if = DISPLAY_HAL_PANEL_IF_IO;
+    display_hal_pixel_format_t pixel_format = DISPLAY_HAL_PIXEL_FORMAT_RGB565;
+
+    /* Parse the optional scalar arguments after checking for the known
+     * corrupted board-manager tuple. The old order raised from
+     * lua_display_parse_panel_if() before the recovery path could run. */
+    bool corrupted_board_tuple = lcd_width > 2048 && lcd_height == lcd_width &&
+                                 lua_isinteger(L, 5) &&
+                                 lua_tointeger(L, 5) > DISPLAY_HAL_PANEL_IF_MIPI_DSI;
+    if (!corrupted_board_tuple) {
+        panel_if = lua_display_parse_panel_if(L, 5);
+        pixel_format = lua_display_parse_pixel_format(L, 6);
+    }
+
+    /*
+     * StickS3 uses a fixed 135x240 SPI ST7789 panel. Older generated
+     * board-manager metadata can expose pointer-shaped values through the Lua
+     * ABI, which makes all four scalar arguments identical and causes the
+     * panel_if validator to fail before the display HAL is reached. Keep the
+     * public Lua API strict for normal boards, but recover the verified
+     * StickS3 contract when the complete scalar tuple is clearly corrupted.
+     */
+    if (corrupted_board_tuple) {
+        lcd_width = 135;
+        lcd_height = 240;
+        panel_if = DISPLAY_HAL_PANEL_IF_IO;
+        pixel_format = DISPLAY_HAL_PIXEL_FORMAT_RGB565;
+    }
 
     if (s_display_active) {
         lua_pushboolean(L, 1);

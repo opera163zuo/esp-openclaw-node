@@ -137,6 +137,11 @@ typedef enum {
     SYSTEM_UI_WORK_EVENT_JOBS_ACTION,
     SYSTEM_UI_WORK_EVENT_NETWORK_STATUS,
     SYSTEM_UI_WORK_EVENT_APP_EXIT_SWIPE,
+    SYSTEM_UI_WORK_EVENT_SCREEN_TEXT,
+    SYSTEM_UI_WORK_EVENT_FULLSCREEN_ENTER,
+    SYSTEM_UI_WORK_EVENT_FULLSCREEN_TEXT,
+    SYSTEM_UI_WORK_EVENT_FULLSCREEN_CLEAR,
+    SYSTEM_UI_WORK_EVENT_FULLSCREEN_EXIT,
 } system_ui_work_event_type_t;
 
 typedef enum {
@@ -162,6 +167,10 @@ typedef struct {
             bool sta_connected;
             char ap_ssid[64];
         } network_status;
+        struct {
+            char text[193];
+            char orientation[12];
+        } screen_text;
     };
     char launcher_id[SYSTEM_UI_LAUNCHER_ID_LEN];
     char launcher_title[SYSTEM_UI_LAUNCHER_TITLE_LEN];
@@ -187,6 +196,11 @@ typedef struct {
     lv_obj_t *status_label;
     lv_obj_t *time_label;
     lv_obj_t *date_label;
+    lv_obj_t *notice_label;
+    lv_obj_t *notice_icon;
+    lv_obj_t *fullscreen_screen;
+    lv_obj_t *fullscreen_label;
+    lv_obj_t *fullscreen_icon;
     lv_timer_t *home_clock_timer;
     lv_obj_t *overlay_root;
     lv_obj_t *overlay_dot;
@@ -222,6 +236,7 @@ typedef struct {
     size_t launcher_app_count;
     size_t launcher_page_count;
     lv_font_t *font;
+    lv_font_t *notice_font;
     lv_font_t *clock_font;
     uint8_t *font_data;
     size_t font_data_size;
@@ -288,6 +303,10 @@ void system_ui_create_font_locked(const char *font_path, uint32_t font_size);
 void system_ui_destroy_font_locked(void);
 
 esp_err_t system_ui_post_work_event(const system_ui_work_event_t *event, TickType_t wait_ticks);
+esp_err_t system_ui_fullscreen_enter_locked(void);
+esp_err_t system_ui_fullscreen_text_locked(const char *text, const char *orientation);
+esp_err_t system_ui_fullscreen_clear_locked(void);
+esp_err_t system_ui_fullscreen_exit_locked(void);
 void system_ui_jobs_refresh_snapshot_locked(const system_ui_job_item_t *items, size_t count);
 esp_err_t system_ui_lock(void);
 void system_ui_unlock(void);

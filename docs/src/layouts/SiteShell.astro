@@ -7,8 +7,6 @@ import {
 } from "@/site/locales";
 import type { ChromeStrings } from "@/site/chrome-i18n";
 import { Languages, ArrowRight, Menu, X, ChevronDown } from "@lucide/astro";
-import logoRaw from "@/assets/logos/logo.svg?raw";
-import EspressifLogo from "@/assets/logos/espressif-logo.svg";
 
 interface Props {
   lang: Lang;
@@ -90,12 +88,10 @@ const currentLocaleLabel =
         letter-spacing: -0.01em;
       }
 
-      .nav-logo {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 7rem;
-        height: auto;
+      .nav-brand-text {
+        white-space: nowrap;
+        font-weight: 700;
+        letter-spacing: -0.02em;
       }
 
       .nav-links {
@@ -289,28 +285,9 @@ const currentLocaleLabel =
         border-top: 1px solid var(--border);
       }
 
-      .footer-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        text-decoration: none;
-      }
-
-      .footer-logo {
-        width: 1.2rem;
-        height: 1.2rem;
-      }
-
-      .footer-logo-text {
+      .footer-brand-text {
         font-size: 0.8rem;
         color: var(--text-muted);
-      }
-
-      .footer-logo-text:hover {
-        color: var(--text-secondary);
-      }
-
-      .footer-logo-text-highlight {
         font-weight: 600;
       }
 
@@ -508,18 +485,14 @@ const currentLocaleLabel =
   <body>
     <div class="site-container">
       <nav>
-        <a href={localeHref(lang, "")} class="nav-brand">
-          <span class="nav-logo" set:html={logoRaw} />
+        <a href={localeHref(lang, "")} class="nav-brand" aria-label="ESP-OpenClaw-Node">
+          <span class="nav-brand-text">ESP-OpenClaw-Node</span>
         </a>
         <div class="nav-links">
           <a href={localeHref(lang, "")}>{chrome.navHome}</a>
           <a href={localeHref(lang, "tutorial")}>{chrome.navDocs}</a>
           <a
-            href="https://skills-lab.esp-claw.com"
-            target="_blank"
-            rel="noopener">{chrome.navSkillsLab}</a>
-          <a
-            href="https://github.com/espressif/esp-claw"
+            href="https://github.com/opera163zuo/esp-openclaw-node"
             target="_blank"
             rel="noopener">{chrome.navGitHub}</a
           >
@@ -576,15 +549,7 @@ const currentLocaleLabel =
             <a href={localeHref(lang, "")} data-mobile-nav-link>{chrome.navHome}</a>
             <a href={localeHref(lang, "tutorial")} data-mobile-nav-link>{chrome.navDocs}</a>
             <a
-              href="https://skills-lab.esp-claw.com"
-              target="_blank"
-              rel="noopener"
-              data-mobile-nav-link
-            >
-              {chrome.navSkillsLab}
-            </a>
-            <a
-              href="https://github.com/espressif/esp-claw"
+              href="https://github.com/opera163zuo/esp-openclaw-node"
               target="_blank"
               rel="noopener"
               data-mobile-nav-link
@@ -628,18 +593,7 @@ const currentLocaleLabel =
       <slot />
 
       <footer>
-        <a href="https://www.espressif.com" class="footer-brand">
-          <img class="footer-logo" src={EspressifLogo.src} alt="Espressif" />
-          <span class="footer-logo-text">
-            Copyright ©
-            {
-              new Date().getFullYear() === 2026
-                ? "2026"
-                : `2026-${new Date().getFullYear() + 1}`
-            }
-            <span class="footer-logo-text-highlight">Espressif Systems</span>
-          </span>
-        </a>
+        <span class="footer-brand-text">ESP-OpenClaw-Node</span>
         <div class="footer-links">
           <a href={chrome.footerTermsLink}>{chrome.footerTerms}</a>
           <a href={chrome.footerPrivacyLink}>{chrome.footerPrivacy}</a>

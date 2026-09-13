@@ -5,15 +5,7 @@ import { localeHref } from "@/site/locales";
 import { getChromeStrings } from "@/site/chrome-i18n";
 import { getHomeContent } from "@/site/home-i18n";
 
-import EspressifLogoHorizontal from "@/assets/logos/espressif-logo-horizontal.svg";
-import CloudToClaw from "@/assets/images/cloud-to-claw.png";
-import ArchitectureDiagram from "@/assets/images/architecture-diagram-dark.webp";
-
-import { Zap } from "@lucide/astro"
-import ClawLogoHorizontalRaw from "@/assets/logos/logo-horizontal.svg?raw";
-import ClawAnimationRaw from "@/assets/logos/claw-animation.svg?raw";
-import ClawAnimationUrl from "@/assets/logos/claw-animation.svg?url";
-
+import { Zap } from "@lucide/astro";
 export function getStaticPaths() {
   return [{ params: { lang: "en" } }, { params: { lang: "zh-cn" } }];
 }
@@ -35,7 +27,15 @@ const flashHref = localeHref(lang, "flash");
 >
   <style slot="head">
     @import url('@/styles/homepage.css');
-    
+
+    .hero-brand-title {
+      font-size: clamp(2rem, 5vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--text-primary);
+      margin: 1rem 0 1.5rem;
+    }
+
     .hero {
       display: flex;
       justify-content: center;
@@ -95,13 +95,9 @@ const flashHref = localeHref(lang, "flash");
       }
     }
 
-    .hero-claw-logo {
-      width: 18rem;
-      height: auto;
-      display: inline-block;
-      margin-bottom: 1rem;
-      margin-top: 1rem;
-      padding: 1rem;
+    .hero-project-note {
+      color: var(--text-secondary);
+      margin: 0 0 1.5rem;
     }
 
     .hero-logo-easter-egg {
@@ -1159,39 +1155,13 @@ const flashHref = localeHref(lang, "flash");
           {h.heroBadge}
         </div>
 
-        <div
-          id="hero-logo-egg"
-          class="hero-logo-easter-egg"
-          role="button"
-          tabindex="0"
-          aria-label="Toggle logo animation"
-          title="✨"
-        >
-          <span class="hero-claw-logo egg-static" set:html={ClawLogoHorizontalRaw} />
-          <span class="hero-claw-logo egg-anim" set:html={ClawAnimationRaw} />
-          <span class="egg-hint">✨</span>
-        </div>
+        <div class="hero-brand-title">ESP-OpenClaw-Node</div>
 
         <p class="hero-description">
           <span set:html={h.heroDescription}></span>
         </p>
 
-        <p class="hero-espressif">
-          <a href="https://github.com/espressif/esp-claw" target="_blank" rel="noopener">
-            <img
-              src="https://img.shields.io/github/stars/espressif/esp-claw?style=for-the-badge&logo=github&label=Stars&color=e8362d"
-              alt="GitHub Stars"
-              class="hero-espressif-badge"
-            />
-          </a>
-          <span class="hero-espressif-meta">
-            <span class="hero-espressif-divider" aria-hidden="true">|</span>
-            {h.heroEspressifPrefix}
-            <a href="https://www.espressif.com/" target="_blank" rel="noopener">
-              <img src={EspressifLogoHorizontal.src} alt="ESPRESSIF" class="hero-espressif-logo" />
-            </a>
-          </span>
-        </p>
+        <p class="hero-project-note">OpenClaw Native Node firmware for M5Stack StickS3 / ESP32-S3.</p>
 
         <div class="hero-actions">
           <a href={flashHref} class="btn-primary">
@@ -1234,20 +1204,11 @@ const flashHref = localeHref(lang, "flash");
     <div class="what-s-missing-after-iot-inner">
       <h2>{h.whatsMissingAfterIoTTitle}</h2>
       <p>{h.whatsMissingAfterIoTP1}</p>
-      <img src={CloudToClaw.src} alt="cloud-to-claw" />
       <p>{h.whatsMissingAfterIoTP2}</p>
     </div>
-  </section>
 
-  <section class="tech-advantages">
     <div class="tech-advantages-inner">
       <h2>{h.techAdvantagesTitle}</h2>
-      <figure class="tech-advantages-figure">
-        <img src={ArchitectureDiagram.src} alt={h.techAdvantagesTitle} loading="lazy" />
-        <figcaption class="tech-advantages-note">
-          All logos and product names are the property of their respective owners and are used for identification purposes only.
-        </figcaption>
-      </figure>
     </div>
   </section>
 
@@ -1347,50 +1308,6 @@ const flashHref = localeHref(lang, "flash");
         if (!wasActive) item.classList.add('hl-active');
       });
     });
-  </script>
-
-  <div id="cursor-claw" aria-hidden="true">
-    <img src={ClawAnimationUrl} alt="" width="80" height="80" />
-  </div>
-
-  <script>
-    const egg = document.getElementById('hero-logo-egg') as HTMLElement | null;
-    const cursorClaw = document.getElementById('cursor-claw') as HTMLElement | null;
-    let eggState = 0;
-
-    function onMouseMove(e: MouseEvent) {
-      if (cursorClaw) {
-        cursorClaw.style.left = e.clientX + 'px';
-        cursorClaw.style.top = e.clientY + 'px';
-      }
-    }
-
-    if (egg) {
-      const toggle = () => {
-        eggState = (eggState + 1) % 3;
-
-        if (eggState === 1) {
-          egg.classList.add('egg-active');
-          if (cursorClaw) cursorClaw.classList.remove('claw-visible');
-          document.removeEventListener('mousemove', onMouseMove);
-        } else if (eggState === 2) {
-          egg.classList.add('egg-active');
-          if (cursorClaw) {
-            cursorClaw.classList.add('claw-visible');
-            document.addEventListener('mousemove', onMouseMove);
-          }
-        } else {
-          egg.classList.remove('egg-active');
-          if (cursorClaw) cursorClaw.classList.remove('claw-visible');
-          document.removeEventListener('mousemove', onMouseMove);
-        }
-      };
-
-      egg.addEventListener('click', toggle);
-      egg.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-      });
-    }
   </script>
 
   <script>

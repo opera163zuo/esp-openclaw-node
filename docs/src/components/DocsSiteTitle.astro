@@ -1,15 +1,12 @@
 ---
 import { getRelativeLocaleUrl } from "astro:i18n";
-import logoRaw from "@/assets/logos/logo.svg?raw";
 
 const mainPage = getRelativeLocaleUrl(Astro.currentLocale ?? "en", "/");
 const docsPage = getRelativeLocaleUrl(Astro.currentLocale ?? "en", "/tutorial/");
 ---
 
 <div class="site-title sl-flex">
-  <a class="project-name" href={mainPage} aria-label="ESP-Claw">
-    <span class="project-logo" set:html={logoRaw} />
-  </a>
+  <span class="project-name-text">ESP-OpenClaw-Node</span>
   <span class="divider"></span>
   <a class="docs-name" href={docsPage} aria-label="Docs">Docs</a>
 </div>
@@ -21,19 +18,13 @@ const docsPage = getRelativeLocaleUrl(Astro.currentLocale ?? "en", "/tutorial/")
     justify-content: center;
     display: flex;
   }
-  .project-name {
+  .project-name-text {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
     color: var(--sl-color-white);
     font-weight: 600;
     font-size: 1.4rem;
-    text-decoration: none;
     letter-spacing: -0.01em;
-  }
-  .project-logo {
-    display: block;
-    line-height: 0;
   }
   .docs-name {
     color: var(--sl-color-text-accent);

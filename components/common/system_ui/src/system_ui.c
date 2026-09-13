@@ -130,6 +130,82 @@ static void system_ui_handle_network_status_event(const system_ui_work_event_t *
     system_ui_unlock();
 }
 
+static void system_ui_handle_screen_text_event(const system_ui_work_event_t *event)
+{
+    static const char coin_utf8[] = "\xF0\x9F\x92\xB0";
+    static const char sun_utf8[] = "\xE2\x98\x80";
+    static const char cloud_sun_utf8[] = "\xE2\x9B\x85";
+    static const char showers_utf8[] = "\xF0\x9F\x8C\xA6";
+    static const char heart_utf8[] = "\xF0\x9F\x92\x9B";
+    char text[193];
+    const char *icon_code = NULL;
+    lv_color_t icon_color = lv_color_hex(0xF5B700);
+    size_t icon_len = 0;
+    strlcpy(text, event->screen_text.text, sizeof(text));
+    const char *matches[] = {coin_utf8, sun_utf8, cloud_sun_utf8, showers_utf8, heart_utf8};
+    const lv_color_t colors[] = {
+        lv_color_hex(0xF5B700), lv_color_hex(0xFFD21F), lv_color_hex(0xB8D7FF),
+        lv_color_hex(0x5CB8FF), lv_color_hex(0xFF6B81)
+    };
+    for (size_t i = 0; i < sizeof(matches) / sizeof(matches[0]); ++i) {
+        const char *found = strstr(text, matches[i]);
+        if (found && (!icon_code || found < icon_code)) {
+            icon_code = matches[i];
+            icon_len = strlen(matches[i]);
+            if (text[found - text + icon_len] == '\xEF' &&
+                text[found - text + icon_len + 1] == '\xB8' &&
+                text[found - text + icon_len + 2] == '\x8F') {
+                icon_len += 3;
+            }
+            icon_color = colors[i];
+        }
+    }
+    if (icon_code) {
+        size_t off = (size_t)(icon_code - text);
+        memmove(text + off, text + off + icon_len, strlen(text + off + icon_len) + 1);
+    }
+    for (size_t i = 0; i < sizeof(matches) / sizeof(matches[0]); ++i) {
+        const char *found;
+        while ((found = strstr(text, matches[i])) != NULL) {
+            size_t off = (size_t)(found - text);
+            size_t len = strlen(matches[i]);
+            if (found[len] == '\xEF' && found[len + 1] == '\xB8' && found[len + 2] == '\x8F') {
+                len += 3;
+            }
+            memmove(text + off, text + off + len, strlen(text + off + len) + 1);
+        }
+    }
+    if (system_ui_lock() != ESP_OK) return;
+    if (s_ui.started && event->generation == s_ui.generation && s_ui.home_tile && s_ui.font) {
+        if (s_ui.notice_label) lv_obj_del(s_ui.notice_label);
+        if (s_ui.notice_icon) lv_obj_del(s_ui.notice_icon);
+        s_ui.notice_label = lv_label_create(s_ui.home_tile);
+        if (s_ui.notice_label) {
+            lv_label_set_text(s_ui.notice_label, text);
+            lv_label_set_long_mode(s_ui.notice_label, LV_LABEL_LONG_WRAP);
+            lv_obj_set_size(s_ui.notice_label, s_ui.width - (icon_code ? 28 : 8), 48);
+            lv_obj_set_style_text_font(s_ui.notice_label,
+                                       s_ui.notice_font ? s_ui.notice_font : s_ui.font, 0);
+            lv_obj_set_style_text_color(s_ui.notice_label, lv_color_white(), 0);
+            lv_obj_set_style_text_align(s_ui.notice_label, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_align(s_ui.notice_label, LV_ALIGN_BOTTOM_MID, 0, -4);
+        }
+        if (icon_code) {
+            s_ui.notice_icon = lv_obj_create(s_ui.home_tile);
+            if (s_ui.notice_icon) {
+                lv_obj_set_size(s_ui.notice_icon, 16, 16);
+                lv_obj_set_style_radius(s_ui.notice_icon, LV_RADIUS_CIRCLE, 0);
+                lv_obj_set_style_bg_color(s_ui.notice_icon, icon_color, 0);
+                lv_obj_set_style_bg_opa(s_ui.notice_icon, LV_OPA_COVER, 0);
+                lv_obj_set_style_border_width(s_ui.notice_icon, 2, 0);
+                lv_obj_set_style_border_color(s_ui.notice_icon, lv_color_white(), 0);
+                lv_obj_align(s_ui.notice_icon, LV_ALIGN_BOTTOM_RIGHT, -5, -20);
+            }
+        }
+    }
+    system_ui_unlock();
+}
+
 static void system_ui_event_task(void *arg)
 {
     (void)arg;
@@ -176,6 +252,21 @@ static void system_ui_event_task(void *arg)
             break;
         case SYSTEM_UI_WORK_EVENT_NETWORK_STATUS:
             system_ui_handle_network_status_event(&event);
+            break;
+        case SYSTEM_UI_WORK_EVENT_SCREEN_TEXT:
+            system_ui_handle_screen_text_event(&event);
+            break;
+        case SYSTEM_UI_WORK_EVENT_FULLSCREEN_ENTER:
+            (void)system_ui_fullscreen_enter_locked();
+            break;
+        case SYSTEM_UI_WORK_EVENT_FULLSCREEN_TEXT:
+            (void)system_ui_fullscreen_text_locked(event.screen_text.text, event.screen_text.orientation);
+            break;
+        case SYSTEM_UI_WORK_EVENT_FULLSCREEN_CLEAR:
+            (void)system_ui_fullscreen_clear_locked();
+            break;
+        case SYSTEM_UI_WORK_EVENT_FULLSCREEN_EXIT:
+            (void)system_ui_fullscreen_exit_locked();
             break;
         case SYSTEM_UI_WORK_EVENT_APP_EXIT_SWIPE:
         {
@@ -524,6 +615,137 @@ esp_err_t system_ui_lock(void)
 void system_ui_unlock(void)
 {
     display_service_unlock();
+}
+
+esp_err_t system_ui_fullscreen_enter_locked(void)
+{
+    ESP_RETURN_ON_FALSE(s_ui.started && s_ui.home_screen, ESP_ERR_INVALID_STATE, SYSTEM_UI_TAG, "ui not started");
+    if (s_ui.fullscreen_screen) return ESP_OK;
+    s_ui.fullscreen_screen = lv_obj_create(NULL);
+    ESP_RETURN_ON_FALSE(s_ui.fullscreen_screen != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG, "create fullscreen failed");
+    lv_obj_set_style_bg_color(s_ui.fullscreen_screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(s_ui.fullscreen_screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_ui.fullscreen_screen, 0, 0);
+    lv_obj_set_style_pad_all(s_ui.fullscreen_screen, 0, 0);
+    display_service_set_default_screen_locked(s_ui.fullscreen_screen);
+    system_ui_load_screen_locked(s_ui.fullscreen_screen);
+    return ESP_OK;
+}
+
+esp_err_t system_ui_fullscreen_text_locked(const char *text, const char *orientation)
+{
+    ESP_RETURN_ON_FALSE(text != NULL && strlen(text) <= 192, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "fullscreen text invalid");
+    ESP_RETURN_ON_ERROR(system_ui_fullscreen_enter_locked(), SYSTEM_UI_TAG, "enter fullscreen failed");
+    if (s_ui.fullscreen_label) lv_obj_del(s_ui.fullscreen_label);
+    s_ui.fullscreen_label = lv_label_create(s_ui.fullscreen_screen);
+    ESP_RETURN_ON_FALSE(s_ui.fullscreen_label != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG, "create fullscreen label failed");
+    char rendered[193];
+    strlcpy(rendered, text, sizeof(rendered));
+    const char *icon_code = NULL;
+    lv_color_t icon_color = lv_color_hex(0xF5B700);
+    const char *icon_matches[] = {
+        "\xF0\x9F\x92\xB0", "\xE2\x98\x80", "\xE2\x9B\x85", "\xF0\x9F\x8C\xA6", "\xF0\x9F\x92\x9B"
+    };
+    const lv_color_t icon_colors[] = {
+        lv_color_hex(0xF5B700), lv_color_hex(0xFFD21F), lv_color_hex(0xB8D7FF),
+        lv_color_hex(0x5CB8FF), lv_color_hex(0xFF6B81)
+    };
+    for (size_t i = 0; i < sizeof(icon_matches) / sizeof(icon_matches[0]); ++i) {
+        const char *found = strstr(rendered, icon_matches[i]);
+        if (found && (!icon_code || found < icon_code)) {
+            icon_code = found;
+            icon_color = icon_colors[i];
+        }
+    }
+    if (icon_code) {
+        const char *icon_start = icon_code;
+        size_t icon_len = 4;
+        size_t off = (size_t)(icon_start - rendered);
+        if (icon_start[0] == '\xE2') icon_len = 3;
+        memmove(rendered + off, rendered + off + icon_len, strlen(rendered + off + icon_len) + 1);
+    }
+    lv_label_set_text(s_ui.fullscreen_label, rendered);
+    lv_label_set_long_mode(s_ui.fullscreen_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_size(s_ui.fullscreen_label, s_ui.width - 8, s_ui.height - 8);
+    lv_obj_set_style_text_font(s_ui.fullscreen_label, s_ui.notice_font ? s_ui.notice_font : s_ui.font, 0);
+    lv_obj_set_style_text_color(s_ui.fullscreen_label, lv_color_white(), 0);
+    lv_obj_set_style_text_align(s_ui.fullscreen_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(s_ui.fullscreen_label, LV_ALIGN_CENTER, 0, 0);
+    /* The SPI adapter rotation is fixed at registration time. Changing LVGL's
+     * logical rotation here desynchronizes the 135x240 flush geometry and can
+     * produce corrupted frames after the fullscreen page is removed. */
+    (void)orientation;
+    if (icon_code) {
+        s_ui.fullscreen_icon = lv_obj_create(s_ui.fullscreen_screen);
+        if (s_ui.fullscreen_icon) {
+            lv_obj_set_size(s_ui.fullscreen_icon, 24, 24);
+            lv_obj_set_style_radius(s_ui.fullscreen_icon, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_color(s_ui.fullscreen_icon, icon_color, 0);
+            lv_obj_set_style_bg_opa(s_ui.fullscreen_icon, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(s_ui.fullscreen_icon, 2, 0);
+            lv_obj_set_style_border_color(s_ui.fullscreen_icon, lv_color_white(), 0);
+            lv_obj_align(s_ui.fullscreen_icon, LV_ALIGN_CENTER, 42, 0);
+        }
+    }
+    return ESP_OK;
+}
+
+esp_err_t system_ui_fullscreen_clear_locked(void)
+{
+    ESP_RETURN_ON_FALSE(s_ui.fullscreen_screen != NULL, ESP_ERR_INVALID_STATE, SYSTEM_UI_TAG, "fullscreen not active");
+    if (s_ui.fullscreen_label) { lv_obj_del(s_ui.fullscreen_label); s_ui.fullscreen_label = NULL; }
+    if (s_ui.fullscreen_icon) { lv_obj_del(s_ui.fullscreen_icon); s_ui.fullscreen_icon = NULL; }
+    return ESP_OK;
+}
+
+esp_err_t system_ui_fullscreen_exit_locked(void)
+{
+    if (s_ui.fullscreen_screen) { lv_obj_del(s_ui.fullscreen_screen); s_ui.fullscreen_screen = NULL; }
+    s_ui.fullscreen_label = NULL;
+    s_ui.fullscreen_icon = NULL;
+    display_service_set_default_screen_locked(s_ui.home_screen);
+    system_ui_load_screen_locked(s_ui.home_screen);
+    return ESP_OK;
+}
+
+esp_err_t system_ui_fullscreen_enter(void)
+{
+    system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_FULLSCREEN_ENTER, .generation = s_ui.generation};
+    return system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
+}
+
+esp_err_t system_ui_fullscreen_text(const char *text, const char *orientation)
+{
+    system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_FULLSCREEN_TEXT, .generation = s_ui.generation};
+    ESP_RETURN_ON_FALSE(text != NULL && strlen(text) <= 192, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "fullscreen text invalid");
+    strlcpy(event.screen_text.text, text, sizeof(event.screen_text.text));
+    strlcpy(event.screen_text.orientation, orientation ? orientation : "portrait", sizeof(event.screen_text.orientation));
+    return system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
+}
+
+esp_err_t system_ui_fullscreen_clear(void)
+{
+    system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_FULLSCREEN_CLEAR, .generation = s_ui.generation};
+    return system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
+}
+
+esp_err_t system_ui_fullscreen_exit(void)
+{
+    system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_FULLSCREEN_EXIT, .generation = s_ui.generation};
+    return system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
+}
+
+esp_err_t system_ui_show_text(const char *text)
+{
+    ESP_RETURN_ON_FALSE(text != NULL && text[0] != '\0', ESP_ERR_INVALID_ARG,
+                        SYSTEM_UI_TAG, "screen text missing");
+    ESP_RETURN_ON_FALSE(strlen(text) <= 192, ESP_ERR_INVALID_SIZE,
+                        SYSTEM_UI_TAG, "screen text too long");
+
+    system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_SCREEN_TEXT,
+                                    .generation = s_ui.generation};
+    strlcpy(event.screen_text.text, text, sizeof(event.screen_text.text));
+    return system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
 }
 
 void system_ui_load_screen_locked(lv_obj_t *screen)
