@@ -13,6 +13,7 @@ extern "C" {
 
 #define OPENCLAW_NODE_DEVICE_COMMAND_INFO "device.info"
 #define OPENCLAW_NODE_DEVICE_COMMAND_STATUS "device.status"
+#define OPENCLAW_NODE_DEVICE_COMMAND_NETWORK "device.network"
 
 /** Return the static command names supplied by this module. */
 const char *const *openclaw_node_device_commands(size_t *count);

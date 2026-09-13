@@ -6,6 +6,7 @@
 #include "esp_mac.h"
 #include "esp_heap_caps.h"
 #include "esp_psram.h"
+#include "esp_netif.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +14,7 @@
 static const char *s_commands[] = {
     OPENCLAW_NODE_DEVICE_COMMAND_INFO,
     OPENCLAW_NODE_DEVICE_COMMAND_STATUS,
+    OPENCLAW_NODE_DEVICE_COMMAND_NETWORK,
 };
 
 const char *const *openclaw_node_device_commands(size_t *count)
@@ -55,6 +57,24 @@ static esp_err_t write_status(char *out, size_t size)
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
+static esp_err_t write_network(char *out, size_t size)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip = {0};
+    char ip_text[16] = "0.0.0.0";
+    char gateway_text[16] = "0.0.0.0";
+    bool connected = false;
+    if (netif && esp_netif_get_ip_info(netif, &ip) == ESP_OK) {
+        esp_ip4addr_ntoa(&ip.ip, ip_text, sizeof(ip_text));
+        esp_ip4addr_ntoa(&ip.gw, gateway_text, sizeof(gateway_text));
+        connected = ip.ip.addr != 0;
+    }
+    int n = snprintf(out, size,
+                     "{\"command\":\"device.network\",\"connected\":%s,"
+                     "\"ip\":\"%s\",\"gateway\":\"%s\"}",
+                     connected ? "true" : "false", ip_text, gateway_text);
+    return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
+}
 esp_err_t openclaw_node_device_command(const char *command,
                                        const char *params_json,
                                        char *result_json,
@@ -66,5 +86,6 @@ esp_err_t openclaw_node_device_command(const char *command,
     if (!command || !result_json || result_size == 0) return ESP_ERR_INVALID_ARG;
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_INFO) == 0) return write_info(result_json, result_size);
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_STATUS) == 0) return write_status(result_json, result_size);
+    if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_NETWORK) == 0) return write_network(result_json, result_size);
     return ESP_ERR_NOT_FOUND;
 }
