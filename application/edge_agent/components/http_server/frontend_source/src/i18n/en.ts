@@ -9,9 +9,6 @@ export const en = {
   openMenu: 'Open navigation menu',
   toggleSidebar: 'Toggle sidebar',
   closeMenu: 'Close navigation menu',
-  externalHome: 'Home',
-  externalDocs: 'Documentation',
-  externalGithub: 'GitHub',
 
   navStatus: 'System Status',
   navSystemSettings: 'System Settings',

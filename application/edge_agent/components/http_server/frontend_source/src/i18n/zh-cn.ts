@@ -11,9 +11,6 @@ export const zhCn: Dict = {
   openMenu: '打开导航菜单',
   toggleSidebar: '切换侧边栏',
   closeMenu: '关闭导航菜单',
-  externalHome: '主页',
-  externalDocs: '文档',
-  externalGithub: 'GitHub',
 
   navStatus: '系统状态',
   navSystemSettings: '系统设置',

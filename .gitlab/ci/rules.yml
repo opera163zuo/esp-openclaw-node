@@ -32,7 +32,6 @@
 .patterns-simulator: &patterns-simulator
   - "components/claw_capabilities/cap_lua/**/*"
   - "components/lua_modules/**/*"
-  - "pages/simulator/**/*"
   - "tools/lua_lvgl_web_sim/**/*"
 
 ##############
