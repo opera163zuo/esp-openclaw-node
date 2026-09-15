@@ -29,9 +29,6 @@
 .patterns-application_edge_agent: &patterns-application_edge_agent
   - "application/edge_agent/**/*"
 
-.patterns-docs: &patterns-docs
-  - "docs/**/*"
-
 .patterns-simulator: &patterns-simulator
   - "components/claw_capabilities/cap_lua/**/*"
   - "components/lua_modules/**/*"
@@ -88,8 +85,6 @@
       changes: *patterns-components_common
     - <<: *if-mr
       changes: *patterns-application_edge_agent
-    - <<: *if-mr
-      changes: *patterns-docs
     - when: never
 
 .rules:build:application_mcp_server_point:
@@ -109,26 +104,6 @@
       changes: *patterns-components_common
     - <<: *if-mr
       changes: *patterns-application_mcp_server_point
-    - <<: *if-mr
-      changes: *patterns-docs
-    - when: never
-
-.rules:pre_check:docs:
-  rules:
-    - <<: *if-protected-push
-    - <<: *if-label-pre_check
-    - <<: *if-trigger-job
-    - <<: *if-mr
-      changes: *patterns-docs
-    - when: never
-
-.rules:build:doc:
-  rules:
-    - <<: *if-protected-push
-    - <<: *if-label-build
-    - <<: *if-trigger-job
-    - <<: *if-mr
-      changes: *patterns-docs
     - when: never
 
 .rules:build:simulator:

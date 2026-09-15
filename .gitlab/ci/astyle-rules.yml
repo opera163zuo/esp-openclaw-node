@@ -22,11 +22,3 @@ not_formatted_permanent:
   # - Upstream source code we don't want to modify
   # - Generated files
   check: false
-
-
-docs:
-  # Docs directory contains some .inc files, which are not C include files
-  # and should not be formatted
-  check: false
-  include:
-    - "/docs/**/*.inc"

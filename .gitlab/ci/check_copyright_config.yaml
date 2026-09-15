@@ -73,7 +73,6 @@ ignore:  # You can also select ignoring files here
     - 'components/usb/usb_stream/include/libuvc_def.h'
     - 'components/usb/usb_stream/test_apps/main/wave_1ch_16bits.c'
     - 'components/utilities/xz/**/*'
-    - 'docs/**/*'
     - 'examples/ai/esp_dl/self_learning_classification/main/ui/**/*'
     - 'examples/screen/main/img_array.h'
     - 'examples/keyboard/hid_device/**/*'
