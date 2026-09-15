@@ -31,6 +31,7 @@ static const app_config_field_t s_fields[] = {
     APP_CONFIG_FIELD(ap_ssid, "ap_ssid", ""),
     APP_CONFIG_FIELD(ap_password, "ap_password", ""),
     APP_CONFIG_FIELD(ap_behavior, "ap_behavior", "keep"),
+    APP_CONFIG_FIELD(portal_password, "portal_pwd", ""),
     APP_CONFIG_FIELD(openclaw_gateway_url, "oc_gw_url", ""),
     APP_CONFIG_FIELD(openclaw_gateway_token, "oc_gw_token", ""),
     APP_CONFIG_FIELD(openclaw_device_family, "oc_dev_family", "m5stack-sticks3"),
@@ -183,6 +184,15 @@ esp_err_t app_config_validate_wifi(const app_config_t *config, const char **mess
             *message = "ap_ssid must be 1-32 characters";
         }
         return ESP_ERR_INVALID_ARG;
+    }
+    if (config->portal_password[0] != '\0') {
+        size_t portal_password_len = strlen(config->portal_password);
+        if (portal_password_len < 8 || portal_password_len > 63) {
+            if (message) {
+                *message = "portal_password must be empty or 8-63 characters";
+            }
+            return ESP_ERR_INVALID_ARG;
+        }
     }
     if (!app_config_ap_behavior_is_valid(config->ap_behavior)) {
         if (message) {

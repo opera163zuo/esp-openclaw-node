@@ -52,6 +52,7 @@ static const config_field_def_t CONFIG_FIELDS[] = {
     CONFIG_FIELD("wifi",         ap_ssid),
     CONFIG_SECRET("wifi",        ap_password),
     CONFIG_FIELD("wifi",         ap_behavior),
+    CONFIG_SECRET("wifi",        portal_password),
 
     CONFIG_FIELD("openclaw",     openclaw_gateway_url),
     CONFIG_SECRET("openclaw",    openclaw_gateway_token),
@@ -169,6 +170,9 @@ static esp_err_t emit_config(httpd_req_t *req,
 
 static esp_err_t config_get_handler(httpd_req_t *req)
 {
+    if (!http_server_require_auth(req)) {
+        return ESP_OK;
+    }
     http_server_ctx_t *ctx = http_server_ctx();
     app_config_t *config = NULL;
     esp_err_t err;
@@ -250,6 +254,9 @@ static esp_err_t config_get_handler(httpd_req_t *req)
 
 static esp_err_t config_post_handler(httpd_req_t *req)
 {
+    if (!http_server_require_auth(req)) {
+        return ESP_OK;
+    }
     http_server_ctx_t *ctx = http_server_ctx();
     app_config_t *config = NULL;
     esp_err_t err;
@@ -276,6 +283,7 @@ static esp_err_t config_post_handler(httpd_req_t *req)
     /* Partial writes: only fields present in the JSON body are applied.
      * Empty string is a valid value (lets the client clear a slot). */
     size_t applied_count = 0;
+    size_t matched_count = 0;
 
     for (size_t i = 0; i < CONFIG_FIELD_COUNT; i++) {
         const config_field_def_t *field = &CONFIG_FIELDS[i];
@@ -283,6 +291,7 @@ static esp_err_t config_post_handler(httpd_req_t *req)
         if (!cJSON_IsString(item)) {
             continue;
         }
+        matched_count++;
         /* The mask means "leave the stored secret alone". Anything else -
            including an empty string - is applied as given. */
         if (field->secret && strcmp(item->valuestring, CONFIG_SECRET_MASK) == 0) {
@@ -294,11 +303,14 @@ static esp_err_t config_post_handler(httpd_req_t *req)
 
     cJSON_Delete(root);
 
-    if (applied_count == 0) {
+    if (matched_count == 0) {
         free(config);
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
                                    "Request did not contain any recognised fields");
     }
+    /* A body carrying only masks is a legitimate "keep everything" request: the
+     * WebUI echoes the whole form back and untouched secrets arrive as masks, so
+     * this must not be reported as an error. */
 
     const char *wifi_config_error = NULL;
     err = validate_wifi_config_fields(config, &wifi_config_error);
@@ -329,7 +341,7 @@ static esp_err_t config_post_handler(httpd_req_t *req)
     cJSON_AddBoolToObject(resp, "ok", true);
     cJSON_AddNumberToObject(resp, "applied", (double)applied_count);
     http_server_json_add_string(resp, "message",
-                                "Saved. Restart the device to apply Wi-Fi, core LLM, capability, and Lua module changes.");
+                                "Saved. Restart the device to apply Wi-Fi, capability, and Lua module changes.");
     return http_server_send_json_response(req, resp);
 }
 

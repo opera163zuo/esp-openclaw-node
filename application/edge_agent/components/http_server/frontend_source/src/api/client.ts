@@ -10,6 +10,7 @@ export type AppConfig = {
   ap_ssid: string;
   ap_password: string;
   ap_behavior: string;
+  portal_password: string;
   openclaw_gateway_url: string;
   openclaw_gateway_token: string;
   openclaw_device_family: string;
@@ -24,7 +25,7 @@ export type AppConfig = {
 export type ConfigGroup = 'wifi' | 'openclaw' | 'capabilities' | 'lua' | 'time';
 
 export const GROUP_FIELDS: Record<ConfigGroup, (keyof AppConfig)[]> = {
-  wifi: ['wifi_ssid', 'wifi_password', 'ap_ssid', 'ap_password', 'ap_behavior'],
+  wifi: ['wifi_ssid', 'wifi_password', 'ap_ssid', 'ap_password', 'ap_behavior', 'portal_password'],
   openclaw: ['openclaw_gateway_url', 'openclaw_gateway_token', 'openclaw_device_family'],
   capabilities: ['enabled_cap_groups'],
   lua: ['enabled_lua_modules'],

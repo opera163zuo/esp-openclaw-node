@@ -9,6 +9,9 @@
 
 static esp_err_t lua_modules_get_handler(httpd_req_t *req)
 {
+    if (!http_server_require_auth(req)) {
+        return ESP_OK;
+    }
     const app_lua_module_info_t *modules = NULL;
     size_t module_count = 0;
     cJSON *root = NULL;

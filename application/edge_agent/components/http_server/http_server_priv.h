@@ -30,6 +30,19 @@ char *http_server_alloc_scratch_buffer(void);
 bool http_server_path_is_safe(const char *path);
 void http_server_url_decode_inplace(char *value);
 esp_err_t http_server_query_get(httpd_req_t *req, const char *key, char *value, size_t value_size);
+
+/**
+ * @brief Gate an API handler behind the optional portal password.
+ *
+ * The portal is open by default so first-boot provisioning works. Once
+ * `portal_password` is set, every API handler calls this before doing any work;
+ * it answers with 401 + WWW-Authenticate unless the request carries the password
+ * in an HTTP Basic header. Browsers prompt for Basic credentials natively, so the
+ * WebUI needs no login screen.
+ *
+ * @return true when the request may proceed, false when a 401 has been sent.
+ */
+bool http_server_require_auth(httpd_req_t *req);
 esp_err_t http_server_send_embedded_file(httpd_req_t *req,
                                          const uint8_t *start,
                                          const uint8_t *end,

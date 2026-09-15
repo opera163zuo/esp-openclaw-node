@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app_config.h"
 #include "esp_heap_caps.h"
+#include "mbedtls/base64.h"
 
 char *http_server_alloc_scratch_buffer(void)
 {
@@ -16,6 +18,56 @@ char *http_server_alloc_scratch_buffer(void)
                                    2,
                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
                                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+
+bool http_server_require_auth(httpd_req_t *req)
+{
+    http_server_ctx_t *ctx = http_server_ctx();
+    app_config_t *config = calloc(1, sizeof(*config));
+    char header[256];
+    char supplied[APP_CONFIG_STR_LEN];
+    bool allowed = false;
+    bool password_required = false;
+
+    if (!config) {
+        httpd_resp_send_500(req);
+        return false;
+    }
+    if (ctx->services.load_config(config) != ESP_OK) {
+        free(config);
+        httpd_resp_send_500(req);
+        return false;
+    }
+
+    /* No password configured: the portal stays open so that first-boot
+     * provisioning cannot lock anyone out. */
+    password_required = config->portal_password[0] != '\0';
+
+    if (password_required &&
+        httpd_req_get_hdr_value_str(req, "Authorization", header, sizeof(header)) == ESP_OK &&
+        strncmp(header, "Basic ", 6) == 0) {
+        unsigned char decoded[APP_CONFIG_STR_LEN * 2];
+        size_t decoded_len = 0;
+        if (mbedtls_base64_decode(decoded, sizeof(decoded) - 1, &decoded_len,
+                                  (const unsigned char *)header + 6, strlen(header + 6)) == 0) {
+            decoded[decoded_len] = '\0';
+            /* The header carries "user:password"; the user name is ignored. */
+            const char *colon = strchr((const char *)decoded, ':');
+            strlcpy(supplied, colon ? colon + 1 : "", sizeof(supplied));
+            allowed = strcmp(supplied, config->portal_password) == 0;
+        }
+    }
+    free(config);
+
+    if (password_required && !allowed) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ESP-OpenClaw\"");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store, max-age=0");
+        httpd_resp_sendstr(req, "{\"error\":\"portal password required\"}");
+        return false;
+    }
+    return true;
 }
 
 bool http_server_path_is_safe(const char *path)

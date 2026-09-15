@@ -252,7 +252,9 @@ The provisioning portal itself is unauthenticated: the HTTP server listens on po
 
 Because the portal is unauthenticated, the first boot generates a 12-character random AP password, persists it to NVS, and prints it in the serial log, so the provisioning AP comes up as WPA2 rather than open. Clearing `ap_password` in the portal still yields an open AP for anyone who deliberately wants one.
 
-Production deployments should still add authentication to the portal: the current state prevents secret disclosure but not reconfiguration.
+The portal can optionally require authentication. Setting `portal_password` (empty, or 8-63 characters) makes every API request demand HTTP Basic credentials; browsers prompt for those natively, so the WebUI needs no login screen of its own. The user name is ignored and only the password is checked. Empty is the default, because first-boot provisioning has to be reachable or the device locks its owner out.
+
+The portal is also reachable over the station interface, so an AP password alone does not protect LAN access. Set `portal_password` for any device on a shared network.
 
 ## Repository layout
 

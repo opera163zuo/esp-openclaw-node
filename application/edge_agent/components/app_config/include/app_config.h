@@ -37,6 +37,10 @@ typedef struct {
     char ap_ssid[APP_CONFIG_STR_LEN];
     char ap_password[APP_CONFIG_STR_LEN];
     char ap_behavior[16];
+    /* Optional password for the provisioning portal itself. Empty leaves the
+     * portal open, which is what first-boot provisioning needs; setting it makes
+     * every API request require HTTP Basic auth. */
+    char portal_password[APP_CONFIG_STR_LEN];
     /* OpenClaw Gateway endpoint and node token. Empty URL disables the node. */
     char openclaw_gateway_url[APP_CONFIG_STR_LEN];
     char openclaw_gateway_token[APP_CONFIG_STR_LEN];

@@ -18,6 +18,7 @@ type BasicForm = {
   ap_ssid: string;
   ap_password: string;
   ap_behavior: string;
+  portal_password: string;
   openclaw_gateway_url: string;
   openclaw_gateway_token: string;
   openclaw_device_family: string;
@@ -34,6 +35,7 @@ export const BasicPage: Component<{ onRestartRequest: () => void }> = (props) =>
       ap_ssid: config.ap_ssid ?? '',
       ap_password: config.ap_password ?? '',
       ap_behavior: config.ap_behavior ?? 'keep',
+      portal_password: config.portal_password ?? '',
       openclaw_gateway_url: config.openclaw_gateway_url ?? '',
       openclaw_gateway_token: config.openclaw_gateway_token ?? '',
       openclaw_device_family: config.openclaw_device_family ?? 'm5stack-sticks3',
@@ -45,6 +47,7 @@ export const BasicPage: Component<{ onRestartRequest: () => void }> = (props) =>
       ap_ssid: form.ap_ssid.trim(),
       ap_password: form.ap_password,
       ap_behavior: form.ap_behavior,
+      portal_password: form.portal_password,
       openclaw_gateway_url: form.openclaw_gateway_url.trim(),
       openclaw_gateway_token: form.openclaw_gateway_token,
       openclaw_device_family: form.openclaw_device_family.trim(),
@@ -165,6 +168,14 @@ export const BasicPage: Component<{ onRestartRequest: () => void }> = (props) =>
               <option value="keep">{t('apBehaviorKeep') as string}</option>
               <option value="close_on_sta">{t('apBehaviorCloseOnSta') as string}</option>
             </SelectInput>
+            <TextInput
+              type="password"
+              label={t('portalPassword')}
+              autocomplete="new-password"
+              hint={t('portalPasswordHint') as string}
+              value={tab.form.portal_password}
+              onInput={(event) => tab.setForm('portal_password', event.currentTarget.value)}
+            />
           </div>
         </StaticConfigBlock>
         <StaticConfigBlock title={t('sectionOpenClaw') as string}>

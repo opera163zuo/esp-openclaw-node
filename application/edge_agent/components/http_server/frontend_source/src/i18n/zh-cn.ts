@@ -45,6 +45,8 @@ export const zhCn: Dict = {
   apPassword: 'AP 密码',
   apNameHint: '当前：{ssid}。留空使用默认名称。修改后需重启生效。',
   apPasswordHint: '留空则为开放热点。如设置密码，长度至少 8 个字符。',
+  portalPassword: '门户密码',
+  portalPasswordHint: '留空则门户无需认证。设置后浏览器会在加载配置页前弹出凭据框。',
   apValidationPasswordLength: 'AP 密码需留空或至少 8 个字符。',
   apBehavior: 'AP 行为',
   apBehaviorKeep: '保持开启',

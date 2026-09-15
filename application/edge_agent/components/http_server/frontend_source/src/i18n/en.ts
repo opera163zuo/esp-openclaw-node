@@ -43,6 +43,8 @@ export const en = {
   apPassword: 'AP Password',
   apNameHint: 'Current: {ssid}. Leave empty to keep default name. Changes apply after restart.',
   apPasswordHint: 'Leave empty for open AP. Must be at least 8 characters if set.',
+  portalPassword: 'Portal password',
+  portalPasswordHint: 'Leave empty for an unauthenticated portal. When set, the browser asks for it before the configuration pages load.',
   apValidationPasswordLength: 'AP password must be empty or at least 8 characters long.',
   apBehavior: 'AP Behavior',
   apBehaviorKeep: 'Keep On',
