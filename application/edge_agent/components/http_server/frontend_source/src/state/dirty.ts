@@ -4,13 +4,13 @@ import { t } from '../i18n';
 export type TabId =
   | 'status'
   | 'basic'
-  | 'skills'
+  | 'luaModules'
   | 'files';
 
 const [dirtyTabs, setDirtyTabs] = createSignal<Record<TabId, boolean>>({
   status: false,
   basic: false,
-  skills: false,
+  luaModules: false,
   files: false,
 });
 

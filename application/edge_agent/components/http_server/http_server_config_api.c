@@ -5,6 +5,7 @@
  */
 #include "http_server_priv.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,28 +22,39 @@
  * the same serialisation logic.
  */
 
-#define CONFIG_FIELD(group, field) { \
+/* Secret fields are never sent to the client in clear text. A stored secret is
+ * reported as CONFIG_SECRET_MASK; the WebUI echoes that value back unchanged,
+ * which the POST handler reads as "keep the stored value". An empty string
+ * still clears the slot, so nothing becomes uneditable. */
+#define CONFIG_SECRET_MASK "********"
+
+#define CONFIG_FIELD_EX(group, field, is_secret) { \
     #field, (group), \
     offsetof(app_config_t, field), \
-    sizeof(((app_config_t *)0)->field) \
+    sizeof(((app_config_t *)0)->field), \
+    (is_secret) \
 }
+
+#define CONFIG_FIELD(group, field)  CONFIG_FIELD_EX(group, field, false)
+#define CONFIG_SECRET(group, field) CONFIG_FIELD_EX(group, field, true)
 
 typedef struct {
     const char *name;
     const char *group;
     size_t offset;
     size_t size;
+    bool secret;
 } config_field_def_t;
 
 static const config_field_def_t CONFIG_FIELDS[] = {
     CONFIG_FIELD("wifi",         wifi_ssid),
-    CONFIG_FIELD("wifi",         wifi_password),
+    CONFIG_SECRET("wifi",        wifi_password),
     CONFIG_FIELD("wifi",         ap_ssid),
-    CONFIG_FIELD("wifi",         ap_password),
+    CONFIG_SECRET("wifi",        ap_password),
     CONFIG_FIELD("wifi",         ap_behavior),
 
     CONFIG_FIELD("openclaw",     openclaw_gateway_url),
-    CONFIG_FIELD("openclaw",     openclaw_gateway_token),
+    CONFIG_SECRET("openclaw",    openclaw_gateway_token),
     CONFIG_FIELD("openclaw",     openclaw_device_family),
 
     CONFIG_FIELD("capabilities", enabled_cap_groups),
@@ -137,7 +149,13 @@ static esp_err_t emit_config(httpd_req_t *req,
         if (!field_matches_filter(field, groups_csv, fields_csv)) {
             continue;
         }
-        http_server_json_add_string(root, field->name, field_value(config, field));
+        const char *value = field_value(config, field);
+        /* Never echo a stored secret. The mask still tells the client whether
+           the slot is filled, which is all the UI needs to render. */
+        if (field->secret && value[0] != '\0') {
+            value = CONFIG_SECRET_MASK;
+        }
+        http_server_json_add_string(root, field->name, value);
     }
 
     if (extra_meta) {
@@ -263,6 +281,11 @@ static esp_err_t config_post_handler(httpd_req_t *req)
         const config_field_def_t *field = &CONFIG_FIELDS[i];
         cJSON *item = cJSON_GetObjectItemCaseSensitive(root, field->name);
         if (!cJSON_IsString(item)) {
+            continue;
+        }
+        /* The mask means "leave the stored secret alone". Anything else -
+           including an empty string - is applied as given. */
+        if (field->secret && strcmp(item->valuestring, CONFIG_SECRET_MASK) == 0) {
             continue;
         }
         strlcpy(field_mutable(config, field), item->valuestring, field->size);

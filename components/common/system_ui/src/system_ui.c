@@ -181,25 +181,6 @@ static void system_ui_event_task(void *arg)
                 system_ui_unlock();
             }
             break;
-        case SYSTEM_UI_WORK_EVENT_LAUNCHER_SELECT:
-        {
-            system_ui_launcher_select_cb_t cb = NULL;
-            void *user_ctx = NULL;
-            if (event.generation == s_ui.generation && system_ui_callback_lock() == ESP_OK) {
-                cb = s_ui.launcher_select_cb;
-                user_ctx = s_ui.launcher_select_user_ctx;
-                system_ui_callback_unlock();
-            }
-            if (cb != NULL) {
-                event.launcher_selection.id = event.launcher_id;
-                event.launcher_selection.title = event.launcher_title;
-                event.launcher_selection.action = event.launcher_action;
-                event.launcher_selection.args_json =
-                    event.launcher_args_json[0] ? event.launcher_args_json : NULL;
-                cb(&event.launcher_selection, user_ctx);
-            }
-            break;
-        }
         case SYSTEM_UI_WORK_EVENT_JOBS_REFRESH:
             system_ui_handle_jobs_refresh_event(event.generation);
             break;
@@ -415,8 +396,6 @@ static void system_ui_clear_callbacks_locked(void)
     s_ui.jobs_stop_all_user_ctx = NULL;
     s_ui.app_exit_swipe_cb = NULL;
     s_ui.app_exit_swipe_user_ctx = NULL;
-    s_ui.launcher_select_cb = NULL;
-    s_ui.launcher_select_user_ctx = NULL;
     system_ui_callback_unlock();
 }
 
@@ -527,8 +506,6 @@ bool system_ui_is_started(void)
 esp_err_t system_ui_set_callbacks(const system_ui_callbacks_t *callbacks, void *user_ctx)
 {
     ESP_RETURN_ON_FALSE(callbacks != NULL, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "system UI callbacks missing");
-    ESP_RETURN_ON_ERROR(system_ui_launcher_set_select_callback(callbacks->on_launcher_select, user_ctx),
-                        SYSTEM_UI_TAG, "set launcher callback failed");
     ESP_RETURN_ON_ERROR(system_ui_jobs_set_provider(callbacks->get_tasks, user_ctx),
                         SYSTEM_UI_TAG, "set task provider failed");
     ESP_RETURN_ON_ERROR(system_ui_jobs_set_action_callback(callbacks->on_stop_task, user_ctx),

@@ -228,11 +228,13 @@ idf.py -p /dev/cu.usbmodem101 flash
 - Gateway URL、Token 和设备类型通过本地 AP 配网门户保存到 NVS，源码中不再放置连接凭据；URL 留空时 Native Node 不启动。
 - 配网门户只负责 Wi-Fi 与 OpenClaw 连接，不提供 LLM、Memory、IM 或搜索服务配置。
 - Gateway Token、Wi-Fi 密码和连接字符串不得出现在日志、文档或提交中。
-- **配网门户自身没有任何鉴权。** HTTP 服务监听 80 端口，`GET /api/config` 会把 `wifi_password`、
-  `ap_password` 和 `openclaw_gateway_token` **原样回读**（Web UI 靠它预填表单）。因此同网段内任何人
-  都能读到这些凭据，并能通过写入把 Gateway URL 改指向其它服务器。AP 密码默认为空串
-  （`ap_password` 只在非空时校验），开放 AP 下同样可读。生产部署应给配网门户加鉴权，或改为不回读
-  密钥（前端用掩码占位），并至少为 AP 设置密码。
+- **`GET /api/config` 不回读密钥。** `wifi_password`、`ap_password` 和
+  `openclaw_gateway_token` 已设置时返回固定掩码 `********`；前端原样回传即表示"保持不变"，
+  传空串则清除该项。真实值只存在于设备 NVS，不会经 HTTP 离开设备。
+- **配网 AP 首次启动自动设密码。** 门户本身没有鉴权，同网段任何人都能读写配置、把 Gateway URL
+  改指向其它服务器，所以首次启动会生成 12 位随机 AP 密码、持久化到 NVS 并打印在串口日志里，
+  使配网 AP 为 WPA2 而非开放。在门户里清空 `ap_password` 仍可恢复开放 AP（供刻意需要时使用）。
+- 生产部署仍建议给配网门户加鉴权：当前做到了「不泄露密钥」，但**未**做到「阻止改配置」。
 - 设备身份种子持久化在 NVS；当前开发 `sdkconfig` 没有开启 Flash 加密。生产设备必须启用 ESP Flash/NVS 加密或使用安全元件，才能把该身份视为硬件信任根。**不要在已有设备上直接开启加密并烧录，先备份、确认密钥/量产流程和恢复方案。**
 - 不开放 `shell.exec`、`terminal.exec`、`lua.eval` 或任意命令字符串。
 

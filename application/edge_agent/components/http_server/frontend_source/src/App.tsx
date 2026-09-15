@@ -18,8 +18,8 @@ const StatusPage = lazy(() =>
 const BasicPage = lazy(() =>
   import('./pages/BasicPage').then((mod) => ({ default: mod.BasicPage })),
 );
-const SkillsPage = lazy(() =>
-  import('./pages/SkillsPage').then((mod) => ({ default: mod.SkillsPage })),
+const LuaModulesPage = lazy(() =>
+  import('./pages/LuaModulesPage').then((mod) => ({ default: mod.LuaModulesPage })),
 );
 const FilesPage = lazy(() =>
   import('./pages/FilesPage').then((mod) => ({ default: mod.FilesPage })),
@@ -36,7 +36,6 @@ type RestartRequestOptions = {
 
 function readTabFromHash(): RouteId {
   const hash = window.location.hash.replace(/^#\/?/, '');
-  if (hash === 'search') return 'status';
   if (hash === 'start') return 'start';
   return LEAF_IDS.includes(hash as TabId) ? (hash as TabId) : 'status';
 }
@@ -228,8 +227,8 @@ const App: Component = () => {
                   onRestartRequest={() => void handleRestartRequest({ reloadOnSuccess: true })}
                 />
               </Show>
-              <Show when={currentTab() === 'skills'}>
-                <SkillsPage
+              <Show when={currentTab() === 'luaModules'}>
+                <LuaModulesPage
                   onRestartRequest={() => void handleRestartRequest({ reloadOnSuccess: true })}
                 />
               </Show>

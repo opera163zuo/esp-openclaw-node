@@ -246,7 +246,13 @@ The Gateway URL, optional token, and device family are stored through the local 
 
 Arbitrary `shell.exec`, `terminal.exec`, `lua.eval`, and arbitrary command strings are not exposed.
 
-The provisioning portal itself is unauthenticated. The HTTP server listens on port 80, and `GET /api/config` returns `wifi_password`, `ap_password`, and `openclaw_gateway_token` verbatim — the Web UI relies on that to prefill its form. Anyone on the same network can therefore read those credentials, and can rewrite the Gateway URL to point at another server. The AP password defaults to an empty string (`ap_password` is only validated when non-empty), so an open AP exposes the same. Production deployments should add authentication to the portal, or stop echoing secrets back and mask them in the UI, and should set an AP password at minimum.
+The provisioning portal itself is unauthenticated: the HTTP server listens on port 80, and anyone on the same network can read and rewrite the configuration, including repointing the Gateway URL at another server.
+
+`GET /api/config` does not echo secrets. `wifi_password`, `ap_password`, and `openclaw_gateway_token` are reported as the fixed mask `********` when set; the WebUI sends that value back unchanged to mean "keep", and an empty string clears the slot. The real values never leave the device over HTTP.
+
+Because the portal is unauthenticated, the first boot generates a 12-character random AP password, persists it to NVS, and prints it in the serial log, so the provisioning AP comes up as WPA2 rather than open. Clearing `ap_password` in the portal still yields an open AP for anyone who deliberately wants one.
+
+Production deployments should still add authentication to the portal: the current state prevents secret disclosure but not reconfiguration.
 
 ## Repository layout
 

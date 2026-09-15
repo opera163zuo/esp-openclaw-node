@@ -28,7 +28,7 @@
 
 static const char *TAG = "app_claw";
 
-#define APP_CLAW_LAUNCHER_OUTPUT_LEN 128
+#define APP_CLAW_UI_OUTPUT_LEN 128
 #define APP_CLAW_UI_JOBS_OUTPUT_LEN 4096
 #define APP_CLAW_UI_JOB_STOP_WAIT_MS 50
 
@@ -255,7 +255,7 @@ static esp_err_t app_claw_lua_jobs_stop_all_cb(void *user_ctx)
 
 static esp_err_t app_claw_lua_display_exit_swipe_cb(void *user_ctx)
 {
-    char output[APP_CLAW_LAUNCHER_OUTPUT_LEN] = {0};
+    char output[APP_CLAW_UI_OUTPUT_LEN] = {0};
 
     (void)user_ctx;
     esp_err_t err = cap_lua_stop_all_jobs("display", APP_CLAW_UI_JOB_STOP_WAIT_MS, output, sizeof(output));
@@ -267,49 +267,6 @@ static esp_err_t app_claw_lua_display_exit_swipe_cb(void *user_ctx)
     return err;
 }
 
-static bool app_claw_launcher_action_is_lua_script(const char *action)
-{
-    size_t len;
-
-    if (action == NULL || action[0] != '/' || strstr(action, "..") != NULL) {
-        return false;
-    }
-    len = strlen(action);
-    return len > 4 && strcmp(action + len - 4, ".lua") == 0;
-}
-
-static void app_claw_launcher_select_cb(const system_ui_launcher_item_t *selection, void *user_ctx)
-{
-    char output[APP_CLAW_LAUNCHER_OUTPUT_LEN] = {0};
-
-    (void)user_ctx;
-    if (selection == NULL || !app_claw_launcher_action_is_lua_script(selection->action)) {
-        ESP_LOGW(TAG, "invalid launcher action: %s",
-                 selection && selection->action ? selection->action : "(null)");
-        return;
-    }
-
-    esp_err_t err = cap_lua_run_script_async(selection->action,
-                                             selection->args_json,
-                                             0,
-                                             selection->id,
-                                             "display",
-                                             true,
-                                             output,
-                                             sizeof(output));
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "launcher action failed: title=%s action=%s err=%s output=%s",
-                 selection->title ? selection->title : "(null)",
-                 selection->action,
-                 esp_err_to_name(err),
-                 output);
-        return;
-    }
-    ESP_LOGI(TAG, "launcher action started: title=%s action=%s output=%s",
-             selection->title ? selection->title : "(null)",
-             selection->action,
-             output);
-}
 #endif
 
 static SemaphoreHandle_t s_config_lock;
@@ -360,7 +317,6 @@ esp_err_t app_claw_ui_start(void)
     ESP_RETURN_ON_ERROR(system_ui_start(NULL), TAG, "start system UI failed");
 #if CONFIG_APP_CLAW_CAP_LUA
     const system_ui_callbacks_t callbacks = {
-        .on_launcher_select = app_claw_launcher_select_cb,
         .get_tasks = app_claw_lua_jobs_provider,
         .on_stop_task = app_claw_lua_job_stop_cb,
         .on_stop_all_tasks = app_claw_lua_jobs_stop_all_cb,

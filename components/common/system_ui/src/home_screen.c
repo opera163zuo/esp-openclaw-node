@@ -124,9 +124,9 @@ static esp_err_t system_ui_home_create_status_bar_locked(const system_ui_home_la
 static esp_err_t system_ui_create_home_tile_locked(void)
 {
     system_ui_home_layout_t layout = system_ui_home_layout();
-    lv_dir_t dir = s_ui.launcher_app_count > 0 ? LV_DIR_RIGHT : LV_DIR_NONE;
-
-    /* The clock page is the first tile; launcher pages, when present, sit to the right. */
+    /* The clock is the only tile: the launcher grid was removed with the Agent
+       stack, so there is nothing to swipe to on the right. */
+    lv_dir_t dir = LV_DIR_NONE;
     s_ui.home_tile = lv_tileview_add_tile(s_ui.tileview, 0, 0, dir);
     ESP_RETURN_ON_FALSE(s_ui.home_tile != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG, "create home tile failed");
     lv_obj_set_style_bg_color(s_ui.home_tile, system_ui_color(SYSTEM_UI_COLOR_BG), 0);
@@ -163,8 +163,6 @@ static esp_err_t system_ui_create_home_tile_locked(void)
 
 esp_err_t system_ui_create_home_locked(void)
 {
-    ESP_RETURN_ON_ERROR(system_ui_launcher_load_locked(), SYSTEM_UI_TAG, "load launcher failed");
-
     s_ui.home_screen = lv_obj_create(NULL);
     ESP_RETURN_ON_FALSE(s_ui.home_screen != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG, "create home failed");
     lv_obj_set_style_bg_color(s_ui.home_screen, system_ui_color(SYSTEM_UI_COLOR_BG), 0);
@@ -183,7 +181,6 @@ esp_err_t system_ui_create_home_locked(void)
     lv_obj_set_scrollbar_mode(s_ui.tileview, LV_SCROLLBAR_MODE_OFF);
 
     ESP_RETURN_ON_ERROR(system_ui_create_home_tile_locked(), SYSTEM_UI_TAG, "create home tile failed");
-    ESP_RETURN_ON_ERROR(system_ui_launcher_create_pages_locked(), SYSTEM_UI_TAG, "create launcher pages failed");
     lv_tileview_set_tile(s_ui.tileview, s_ui.home_tile, LV_ANIM_OFF);
     system_ui_load_screen_locked(s_ui.home_screen);
     return ESP_OK;
@@ -232,11 +229,9 @@ void system_ui_delete_home_locked(void)
     if (s_ui.home_screen) {
         lv_obj_delete(s_ui.home_screen);
     }
-    system_ui_launcher_delete_locked();
     s_ui.home_screen = NULL;
     s_ui.home_tile = NULL;
     s_ui.tileview = NULL;
-    s_ui.launcher_first_tile = NULL;
     s_ui.status_label = NULL;
     s_ui.time_label = NULL;
     s_ui.date_label = NULL;

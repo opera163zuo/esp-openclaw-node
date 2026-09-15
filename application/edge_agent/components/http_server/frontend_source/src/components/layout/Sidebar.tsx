@@ -15,7 +15,7 @@ const iconClass = 'w-4 h-4 shrink-0';
 const IconStatus: Component = () => <Activity class={iconClass} />;
 const IconGear: Component = () => <Settings class={iconClass} />;
 const IconWifi: Component = () => <WifiPen class={iconClass} />;
-const IconSkills: Component = () => <SquareFunction class={iconClass} />;
+const IconLuaModules: Component = () => <SquareFunction class={iconClass} />;
 const IconFiles: Component = () => <Folder class={iconClass} />;
 
 export type LeafNode = {
@@ -48,7 +48,7 @@ export const NAV_TREE: NavNode[] = [
       { kind: 'leaf', id: 'basic', labelKey: 'navBasic', icon: IconWifi },
     ],
   },
-  { kind: 'leaf', id: 'skills', labelKey: 'navLuaModules', icon: IconSkills },
+  { kind: 'leaf', id: 'luaModules', labelKey: 'navLuaModules', icon: IconLuaModules },
   { kind: 'leaf', id: 'files', labelKey: 'navFiles', icon: IconFiles },
 ];
 
@@ -80,7 +80,7 @@ type SidebarProps = {
   onCloseMobile?: () => void;
 };
 
-const EXPANDED_STORAGE_KEY = 'esp-claw-sidebar-expanded';
+const EXPANDED_STORAGE_KEY = 'esp-openclaw-sidebar-expanded';
 
 function readExpanded(): Set<string> {
   try {
@@ -263,7 +263,7 @@ export const Sidebar: Component<SidebarProps> = (props) => {
               when={isMobileDrawer()}
               fallback={
                 <span class="block text-[0.7rem] font-bold text-[var(--color-text-muted)] truncate">
-                  ESP-Claw Web Config
+                  ESP-OpenClaw Web Config
                 </span>
               }
             >

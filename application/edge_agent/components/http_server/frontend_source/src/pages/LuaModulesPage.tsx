@@ -43,9 +43,9 @@ function isCapLuaEnabled(): boolean {
   return raw.split(',').map((token) => token.trim()).includes('cap_lua');
 }
 
-export const SkillsPage: Component<{ onRestartRequest: () => void }> = (props) => {
+export const LuaModulesPage: Component<{ onRestartRequest: () => void }> = (props) => {
   const tab = createConfigTab<SkillForm>({
-    tab: 'skills',
+    tab: 'luaModules',
     groups: ['lua', 'capabilities'],
     toForm: (config: Partial<AppConfig>) => ({
       enabled: parseModules(config.enabled_lua_modules ?? '', appLuaModules(), true),

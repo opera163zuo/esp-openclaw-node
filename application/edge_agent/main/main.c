@@ -19,6 +19,7 @@
 #include "esp_err.h"
 #include "esp_check.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "esp_board_manager_includes.h"
 #include "captive_dns.h"
 #include "cmd_wifi.h"
@@ -59,6 +60,37 @@ static void app_free_runtime_state(void)
 
     free(s_config);
     s_config = NULL;
+}
+
+/* The provisioning AP is WPA2 when `ap_password` is set and completely open
+ * when it is not (see wifi_manager.c). An open AP lets anyone within radio
+ * range reach the unauthenticated config portal and repoint the device at
+ * another Gateway, so a password is generated on first boot instead of leaving
+ * the portal open. The value is persisted, so it stays stable across reboots,
+ * and it is printed below for the operator. Clearing it from the portal still
+ * produces an open AP for anyone who deliberately wants one. */
+static void ensure_ap_password(app_config_t *config)
+{
+    if (config->ap_password[0] != '\0') {
+        return;
+    }
+
+    /* 12 characters from an unambiguous alphabet (~59 bits). Long enough that
+     * guessing is not the weak link, short enough to retype from the log. */
+    static const char alphabet[] = "abcdefghijkmnpqrstuvwxyz23456789";
+    char generated[13];
+    for (size_t i = 0; i < sizeof(generated) - 1; i++) {
+        generated[i] = alphabet[esp_random() % (sizeof(alphabet) - 1)];
+    }
+    generated[sizeof(generated) - 1] = '\0';
+
+    strlcpy(config->ap_password, generated, sizeof(config->ap_password));
+    esp_err_t err = app_config_save(config);
+    ESP_LOGW(TAG, "No AP password set; generated one for this device: %s", generated);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "AP password could not be persisted, it will change on reboot: %s",
+                 esp_err_to_name(err));
+    }
 }
 
 static void log_wifi_startup_config(const app_config_t *config)
@@ -297,6 +329,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(app_config_load(s_config));
+    ensure_ap_password(s_config);
     app_config_to_claw(s_config, s_claw_config);
     init_timezone(app_config_get_timezone(s_config)); // no need to check error
     ESP_ERROR_CHECK(esp_board_manager_init());

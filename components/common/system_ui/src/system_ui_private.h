@@ -39,20 +39,14 @@ extern "C" {
 #define SYSTEM_UI_DEFAULT_FONT_SIZE 24
 #define SYSTEM_UI_CLOCK_FONT_SIZE 72
 #define SYSTEM_UI_PATH_MAX 256
-#define SYSTEM_UI_LAUNCHER_MAX_APPS 32
-#define SYSTEM_UI_LAUNCHER_ID_LEN 32
-#define SYSTEM_UI_LAUNCHER_TITLE_LEN 40
-#define SYSTEM_UI_LAUNCHER_ARGS_LEN 384
-#define SYSTEM_UI_LAUNCHER_MAX_TILES 16
-#define SYSTEM_UI_JOBS_MAX_ITEMS 8
 #define SYSTEM_UI_EVENT_QUEUE_LEN 12
+#define SYSTEM_UI_JOBS_MAX_ITEMS 8
 
 #define SYSTEM_UI_JOB_TITLE_LEN SYSTEM_UI_TASK_TITLE_LEN
 #define SYSTEM_UI_JOB_STATUS_LEN SYSTEM_UI_TASK_STATUS_LEN
 #define SYSTEM_UI_JOB_DETAIL_LEN SYSTEM_UI_TASK_DETAIL_LEN
 #define SYSTEM_UI_JOB_ID_LEN SYSTEM_UI_TASK_ID_LEN
 
-typedef system_ui_launcher_item_t system_ui_launcher_selection_t;
 typedef system_ui_task_item_t system_ui_job_item_t;
 typedef system_ui_tasks_provider_cb_t system_ui_jobs_provider_cb_t;
 typedef system_ui_task_action_cb_t system_ui_job_action_cb_t;
@@ -115,29 +109,9 @@ static inline int32_t system_ui_short_side_from(uint32_t width, uint32_t height)
     return system_ui_min_i32((int32_t)width, (int32_t)height);
 }
 
-typedef struct system_ui_launcher_app_t {
-    char id[SYSTEM_UI_LAUNCHER_ID_LEN];
-    char title[SYSTEM_UI_LAUNCHER_TITLE_LEN];
-    char action[SYSTEM_UI_PATH_MAX];
-    char icon_path[SYSTEM_UI_PATH_MAX];
-    char args_json[SYSTEM_UI_LAUNCHER_ARGS_LEN];
-    lv_image_dsc_t icon_dsc;
-    uint8_t *icon_data;
-    size_t icon_data_size;
-    uint16_t icon_side;
-    int order;
-    struct system_ui_launcher_app_t *next;
-} system_ui_launcher_app_t;
-
-typedef struct {
-    uint8_t rows;
-    uint8_t cols;
-} system_ui_launcher_layout_t;
-
 typedef enum {
     SYSTEM_UI_WORK_EVENT_STOP = 0,
     SYSTEM_UI_WORK_EVENT_SHOW_JOBS,
-    SYSTEM_UI_WORK_EVENT_LAUNCHER_SELECT,
     SYSTEM_UI_WORK_EVENT_JOBS_REFRESH,
     SYSTEM_UI_WORK_EVENT_JOBS_ACTION,
     SYSTEM_UI_WORK_EVENT_NETWORK_STATUS,
@@ -159,7 +133,6 @@ typedef struct {
     system_ui_work_event_type_t type;
     uint32_t generation;
     union {
-        system_ui_launcher_selection_t launcher_selection;
         struct {
             bool stop_all;
             char job_id[SYSTEM_UI_JOB_ID_LEN];
@@ -177,10 +150,6 @@ typedef struct {
             char orientation[12];
         } screen_text;
     };
-    char launcher_id[SYSTEM_UI_LAUNCHER_ID_LEN];
-    char launcher_title[SYSTEM_UI_LAUNCHER_TITLE_LEN];
-    char launcher_action[SYSTEM_UI_PATH_MAX];
-    char launcher_args_json[SYSTEM_UI_LAUNCHER_ARGS_LEN];
 } system_ui_work_event_t;
 
 typedef struct {
@@ -197,7 +166,6 @@ typedef struct {
     lv_obj_t *home_screen;
     lv_obj_t *home_tile;
     lv_obj_t *tileview;
-    lv_obj_t *launcher_first_tile;
     lv_obj_t *status_label;
     lv_obj_t *time_label;
     lv_obj_t *date_label;
@@ -229,15 +197,6 @@ typedef struct {
     size_t jobs_item_count;
     system_ui_job_item_t jobs_items[SYSTEM_UI_JOBS_MAX_ITEMS];
     system_ui_jobs_row_t jobs_rows[SYSTEM_UI_JOBS_MAX_ITEMS];
-    system_ui_launcher_select_cb_t launcher_select_cb;
-    void *launcher_select_user_ctx;
-    system_ui_launcher_layout_t launcher_layout;
-    system_ui_launcher_app_t *launcher_apps;
-    lv_image_dsc_t launcher_default_icon_dsc;
-    uint8_t *launcher_default_icon_data;
-    size_t launcher_default_icon_data_size;
-    size_t launcher_app_count;
-    size_t launcher_page_count;
     lv_font_t *font;
     lv_font_t *notice_font;
     lv_font_t *clock_font;
@@ -289,10 +248,6 @@ void system_ui_home_update_locked(void);
 void system_ui_delete_home_locked(void);
 void system_ui_load_screen_locked(lv_obj_t *screen);
 
-esp_err_t system_ui_launcher_load_locked(void);
-esp_err_t system_ui_launcher_create_pages_locked(void);
-void system_ui_launcher_delete_locked(void);
-
 esp_err_t system_ui_create_overlay_locked(void);
 void system_ui_delete_overlay_locked(void);
 
@@ -325,7 +280,6 @@ void system_ui_callback_unlock(void);
 
 esp_err_t system_ui_set_network_status(bool sta_connected, const char *ap_ssid);
 esp_err_t system_ui_overlay_set_visible(bool visible);
-esp_err_t system_ui_launcher_set_select_callback(system_ui_launcher_select_cb_t cb, void *user_ctx);
 esp_err_t system_ui_jobs_set_provider(system_ui_jobs_provider_cb_t cb, void *user_ctx);
 esp_err_t system_ui_jobs_set_action_callback(system_ui_job_action_cb_t cb, void *user_ctx);
 esp_err_t system_ui_jobs_set_stop_all_callback(system_ui_jobs_stop_all_cb_t cb, void *user_ctx);

@@ -16,7 +16,7 @@ export const LOCALES: { id: Locale; label: string }[] = [
   { id: 'zh-cn', label: '简体中文' },
 ];
 
-const STORAGE_KEY = 'esp-claw-lang';
+const STORAGE_KEY = 'esp-openclaw-lang';
 
 function detectLocale(): Locale {
   try {

@@ -11,7 +11,7 @@ type LayoutProps = {
   children: JSX.Element;
 };
 
-const SIDEBAR_STORAGE_KEY = 'esp-claw-sidebar-collapsed';
+const SIDEBAR_STORAGE_KEY = 'esp-openclaw-sidebar-collapsed';
 
 export const Layout: Component<LayoutProps> = (props) => {
   const [collapsed, setCollapsed] = createSignal(
