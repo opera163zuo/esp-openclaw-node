@@ -1,6 +1,6 @@
 # Builds the Emscripten LVGL + Lua simulator for the retained live-scripting
-# workflow. The Skills Lab frontend that used to host it, and the deployment to
-# simulator.esp-claw.com, were removed with the skill system they depended on.
+# workflow. The former Skills Lab frontend and its deployment were removed with
+# the skill system they depended on.
 build_lua_lvgl_web_sim:
   stage: build
   tags:

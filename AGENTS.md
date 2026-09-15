@@ -23,15 +23,6 @@ idf.py build
 idf.py flash monitor
 ```
 
-Docs site:
-
-```bash
-cd docs
-pnpm install
-pnpm build
-pnpm dev
-```
-
 Embedded settings UI:
 
 ```bash
@@ -75,16 +66,6 @@ The firmware uses two logical filesystem roots, configured at boot through `claw
 - User Lua scripts live under the DATA root's `scripts/` sandbox. Built-in Lua libraries are staged under `/system/scripts/builtin/lib`.
 - Recovery defaults are stored under `/system/.recovery` and copied into DATA only when missing.
 - Board-specific `boards/<vendor>/<board>/fatfs_image/` content overlays the SYSTEM image at build time. Board image content does not target DATA and hidden board folders are not considered.
-- Board-specific `boards/<vendor>/<board>/fatfs_image/` content overlays the SYSTEM image at build time. Board image content does not target DATA and hidden board folders are not considered.
-
-## Project-Specific Notes
-
-- Architecture constraints: [`design.md`](.agents/design.md)
-- docs guide: [`docs.md`](.agents/docs.md)
-- Common gotchas: [`gotchas.md`](.agents/gotchas.md)
-- Specs (`.agents/spec/`):
-  - lua module spec: [lua-module-spec.md](.agents/spec/lua-module-spec.md)
-  - claw skill spec: [claw-skill-spec.md](.agents/spec/claw-skill-spec.md)
 
 ## General Engineering Rules
 
