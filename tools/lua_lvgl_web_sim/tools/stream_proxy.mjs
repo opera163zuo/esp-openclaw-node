@@ -20,7 +20,7 @@ const send = (res, status, body, headers = {}) => {
 const proxy = (req, res, target) => {
   const client = target.protocol === "https:" ? https : http;
   const headers = {
-    "user-agent": "ESP-Claw-Web-Sim/1.0",
+    "user-agent": "ESP-OpenClaw-Web-Sim/1.0",
     "accept": req.headers.accept || "*/*",
     "icy-metadata": "0",
   };

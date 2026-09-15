@@ -1,6 +1,6 @@
-# ESP-Claw Lua LVGL Web Simulator
+# ESP-OpenClaw Lua LVGL Web Simulator
 
-This directory contains the Emscripten build for the ESP-Claw Lua LVGL
+This directory contains the Emscripten build for the ESP-OpenClaw Lua LVGL
 simulator. It intentionally keeps only simulator-specific source files in the
 repository.
 
