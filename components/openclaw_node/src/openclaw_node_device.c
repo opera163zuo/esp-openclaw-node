@@ -343,8 +343,11 @@ static esp_err_t screen_fullscreen(const char *command, const char *params_json,
             return ESP_ERR_INVALID_ARG;
         }
         /* Case-insensitive, matching system_ui's own check: an orientation that
-           only differs in case must not pass there and fail here. */
-        if (orientation && strcasecmp(orientation, "portrait") != 0 &&
+           only differs in case must not pass there and fail here. An empty
+           string is documented and implemented as "portrait", so only a
+           non-empty unknown value is rejected. */
+        if (orientation && orientation[0] != '\0' &&
+            strcasecmp(orientation, "portrait") != 0 &&
             strcasecmp(orientation, "landscape") != 0) {
             cJSON_Delete(params);
             return ESP_ERR_INVALID_ARG;

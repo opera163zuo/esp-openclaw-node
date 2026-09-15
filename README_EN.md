@@ -145,9 +145,9 @@ ends up on the panel.
 
 `NotoEmoji-Regular-sub.ttf` (~260 KB, monochrome emoji subset) is chained behind the UI font
 as `lv_font_t.fallback`. `lv_font_get_glyph_dsc()` walks that chain, so emoji are drawn as
-ordinary glyphs and callers never have to substitute or pre-process them. For example `🦞`
-(U+1F99E), which the firmware itself uses in `router_rules.json` and `claw_core_events.c`,
-now renders correctly.
+ordinary glyphs and callers never have to substitute or pre-process them. The firmware no
+longer embeds any emoji of its own - all displayed text comes from the Gateway - so whether a
+given emoji renders is answered by the `missing_glyphs` field, not by documentation.
 
 If the emoji font file is missing, text still renders and emoji degrade to a visible
 missing-glyph box rather than silently disappearing.
@@ -182,8 +182,8 @@ the notice size (16 px).
 ### Adding characters
 
 Fonts are packaged as character subsets, so **any character outside the subset renders as a
-missing-glyph box**. After adding user-visible text (C code, Lua scripts,
-`router_rules.json`, and so on) you need to:
+missing-glyph box**. After adding user-visible text (C code, Lua scripts, and so on) you need
+to:
 
 1. Run the coverage audit to see whether anything was missed:
 
@@ -245,6 +245,8 @@ Verify the board, chip, Flash, PSRAM, and serial port immediately before flashin
 The Gateway URL, optional token, and device family are stored through the local AP provisioning portal in NVS; leaving the URL empty keeps the Native Node disabled. There are no compile-time Gateway connection macros. Never place Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. The identity seed is stored in NVS; the development configuration leaves Flash/NVS encryption disabled. Production devices must design key, backup, and recovery procedures before enabling encryption or using a secure element. Do not enable encryption and flash an existing device without that preparation.
 
 Arbitrary `shell.exec`, `terminal.exec`, `lua.eval`, and arbitrary command strings are not exposed.
+
+The provisioning portal itself is unauthenticated. The HTTP server listens on port 80, and `GET /api/config` returns `wifi_password`, `ap_password`, and `openclaw_gateway_token` verbatim — the Web UI relies on that to prefill its form. Anyone on the same network can therefore read those credentials, and can rewrite the Gateway URL to point at another server. The AP password defaults to an empty string (`ap_password` is only validated when non-empty), so an open AP exposes the same. Production deployments should add authentication to the portal, or stop echoing secrets back and mask them in the UI, and should set an AP password at minimum.
 
 ## Repository layout
 

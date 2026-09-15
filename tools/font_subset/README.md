@@ -63,8 +63,8 @@ render as the missing-glyph box, so treat a new user-visible string as a reason
 to update this file.
 
 `emoji.txt` lists the emoji to keep. The list is deliberately broader than what
-the firmware currently uses — notably `🦞` (U+1F99E), which appears in
-`router_rules.json` and `claw_core_events.c` — because a monochrome emoji
+the firmware currently uses — the firmware now embeds no emoji of its own, since
+every displayed string arrives from the Gateway — because a monochrome emoji
 subset is cheap compared to shipping a second font later.
 
 ## Character Coverage Audit

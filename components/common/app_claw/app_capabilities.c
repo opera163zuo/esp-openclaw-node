@@ -6,8 +6,16 @@
 #include "app_capabilities.h"
 
 #include "app_lua_modules.h"
+/* These headers come from components the manifest only pulls in when the
+ * matching capability is enabled, so the include has to carry the same guard as
+ * the registry entry below. Without it, building with e.g.
+ * CONFIG_APP_CLAW_CAP_FILES=n fails on a missing cap_files.h. */
+#if CONFIG_APP_CLAW_CAP_FILES
 #include "cap_files.h"
+#endif
+#if CONFIG_APP_CLAW_CAP_LUA
 #include "cap_lua.h"
+#endif
 #include "claw_cap.h"
 #include "claw_paths.h"
 #include "esp_check.h"
@@ -67,6 +75,7 @@ static bool group_enabled(const char *configured, const capability_entry_t *entr
     return csv_empty(configured) || csv_contains(configured, entry->group_id);
 }
 
+#if CONFIG_APP_CLAW_CAP_FILES
 static esp_err_t register_files(const app_claw_config_t *config,
                                 const app_claw_storage_paths_t *paths)
 {
@@ -74,7 +83,9 @@ static esp_err_t register_files(const app_claw_config_t *config,
     (void)paths;
     return cap_files_register_group();
 }
+#endif
 
+#if CONFIG_APP_CLAW_CAP_LUA
 static esp_err_t prepare_lua(const app_claw_config_t *config,
                              const app_claw_storage_paths_t *paths)
 {
@@ -96,6 +107,7 @@ static esp_err_t register_lua(const app_claw_config_t *config,
     (void)paths;
     return cap_lua_register_group();
 }
+#endif
 
 static const capability_entry_t s_builtin[] = {
 #if CONFIG_APP_CLAW_CAP_FILES
