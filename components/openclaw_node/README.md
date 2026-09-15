@@ -52,6 +52,35 @@ The file and Lua commands are path-checked. `..` traversal is rejected,
 arbitrary shell execution, terminal execution, `lua.eval`, or free-form command
 strings.
 
+### Text parameters
+
+`device.screen.text` and `device.screen.fullscreen.text` accept:
+
+| Field | Required | Notes |
+|---|---|---|
+| `text` | yes | UTF-8 string, at most **288 bytes** |
+| `orientation` | no | `portrait` (default) or `landscape`, case-insensitive |
+
+The budget is **bytes, not characters**: one CJK character costs three bytes and
+most emoji four, so 288 bytes is roughly 96 CJK characters. That matches what
+the panel can show - the fullscreen label uses the 16 px notice font on a
+135x240 panel, about 14 characters per line over 7 lines. An over-long string is
+rejected with `payload too large (ESP_ERR_INVALID_SIZE)` rather than truncated.
+
+**A long report cannot be split across several calls.** Each text command
+replaces the previous label instead of appending to it, so only the last segment
+would remain on screen. Send the whole report in one call, within the budget.
+
+`orientation: landscape` rotates the label as an object-level transform; the
+panel itself stays portrait. Entering full screen is not a precondition - the
+text command creates the fullscreen screen if needed.
+
+Failures carry a specific reason rather than a bare `command failed`, e.g.
+`payload too large (ESP_ERR_INVALID_SIZE)` for an over-long string,
+`invalid arguments (ESP_ERR_INVALID_ARG)` for a missing `text` field or an
+unrecognised `orientation`, and `unknown command (ESP_ERR_NOT_FOUND)` for a
+command outside the declared allowlist.
+
 ## Provisioning and pairing
 
 1. Power the board and join the printed provisioning AP if no usable station

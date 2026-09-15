@@ -16,6 +16,23 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Maximum byte length accepted by @ref system_ui_show_text and
+ *        @ref system_ui_fullscreen_text.
+ *
+ * The budget is UTF-8 bytes, not characters. A CJK character costs three bytes
+ * and most emoji four, so 288 bytes is roughly 96 CJK characters. That is
+ * matched to what the panel can actually show: the fullscreen label uses the
+ * 16 px notice font on a 135x240 panel, which fits about 14 characters per
+ * line over 7 lines (~98 CJK characters), and portrait fits the same. Callers
+ * that exceed the budget are rejected with ESP_ERR_INVALID_SIZE rather than
+ * truncated silently.
+ *
+ * Note that consecutive calls replace the text rather than appending to it, so
+ * a long report cannot be split across several calls.
+ */
+#define SYSTEM_UI_SCREEN_TEXT_MAX 288
+
 esp_err_t system_ui_start(const system_ui_config_t *config);
 void system_ui_stop(void);
 bool system_ui_is_started(void);

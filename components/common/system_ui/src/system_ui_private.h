@@ -173,7 +173,7 @@ typedef struct {
             char ap_ssid[64];
         } network_status;
         struct {
-            char text[193];
+            char text[SYSTEM_UI_SCREEN_TEXT_MAX + 1];
             char orientation[12];
         } screen_text;
     };

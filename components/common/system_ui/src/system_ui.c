@@ -133,7 +133,7 @@ static void system_ui_handle_network_status_event(const system_ui_work_event_t *
 
 static void system_ui_handle_screen_text_event(const system_ui_work_event_t *event)
 {
-    char text[193];
+    char text[SYSTEM_UI_SCREEN_TEXT_MAX + 1];
 
     /* Emoji are ordinary glyphs now: the notice font chains the monochrome
        emoji subset as its fallback, so the text is rendered verbatim and the
@@ -614,7 +614,9 @@ static bool system_ui_orientation_is_known(const char *orientation)
 
 esp_err_t system_ui_fullscreen_text_locked(const char *text, const char *orientation)
 {
-    ESP_RETURN_ON_FALSE(text != NULL && strlen(text) <= 192, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "fullscreen text invalid");
+    ESP_RETURN_ON_FALSE(text != NULL, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "fullscreen text missing");
+    ESP_RETURN_ON_FALSE(strlen(text) <= SYSTEM_UI_SCREEN_TEXT_MAX, ESP_ERR_INVALID_SIZE,
+                        SYSTEM_UI_TAG, "fullscreen text too long");
     if (!system_ui_orientation_is_known(orientation)) {
         /* Fail loudly rather than silently rendering portrait for a request the
            caller believes was honoured. */
@@ -678,7 +680,9 @@ esp_err_t system_ui_fullscreen_enter(void)
 esp_err_t system_ui_fullscreen_text(const char *text, const char *orientation)
 {
     system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_FULLSCREEN_TEXT, .generation = s_ui.generation};
-    ESP_RETURN_ON_FALSE(text != NULL && strlen(text) <= 192, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "fullscreen text invalid");
+    ESP_RETURN_ON_FALSE(text != NULL, ESP_ERR_INVALID_ARG, SYSTEM_UI_TAG, "fullscreen text missing");
+    ESP_RETURN_ON_FALSE(strlen(text) <= SYSTEM_UI_SCREEN_TEXT_MAX, ESP_ERR_INVALID_SIZE,
+                        SYSTEM_UI_TAG, "fullscreen text too long");
     strlcpy(event.screen_text.text, text, sizeof(event.screen_text.text));
     strlcpy(event.screen_text.orientation, orientation ? orientation : "portrait", sizeof(event.screen_text.orientation));
     return system_ui_post_work_event(&event, pdMS_TO_TICKS(100));
@@ -700,7 +704,7 @@ esp_err_t system_ui_show_text(const char *text)
 {
     ESP_RETURN_ON_FALSE(text != NULL && text[0] != '\0', ESP_ERR_INVALID_ARG,
                         SYSTEM_UI_TAG, "screen text missing");
-    ESP_RETURN_ON_FALSE(strlen(text) <= 192, ESP_ERR_INVALID_SIZE,
+    ESP_RETURN_ON_FALSE(strlen(text) <= SYSTEM_UI_SCREEN_TEXT_MAX, ESP_ERR_INVALID_SIZE,
                         SYSTEM_UI_TAG, "screen text too long");
 
     system_ui_work_event_t event = {.type = SYSTEM_UI_WORK_EVENT_SCREEN_TEXT,
@@ -739,10 +743,16 @@ esp_err_t system_ui_text_coverage(const char *text, size_t *out_missing, uint32_
         }
         cursor += consumed;
 
-        /* Control characters drive layout instead of resolving to a glyph, and
-           tiny_ttf only short-circuits the ones below 0x20 - 0x7F would be
-           reported as missing if it were not skipped here. */
-        if (codepoint < 0x20 || codepoint == 0x7F) {
+        /* Skip code points that carry no glyph by definition. Control characters
+           drive layout, and the variation selectors and zero-width joiners are
+           invisible parts of an emoji sequence - counting them would report a
+           perfectly renderable string as having missing glyphs (a sun emoji
+           followed by U+FE0F was flagged before this filter). tiny_ttf only
+           short-circuits code points below 0x20, so the rest are filtered here. */
+        if (codepoint < 0x20 || codepoint == 0x7F ||
+            (codepoint >= 0xFE00 && codepoint <= 0xFE0F) ||
+            (codepoint >= 0xE0100 && codepoint <= 0xE01EF) ||
+            codepoint == 0x200C || codepoint == 0x200D) {
             continue;
         }
 

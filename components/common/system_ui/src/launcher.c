@@ -92,25 +92,6 @@ static esp_err_t system_ui_launcher_read_binary_file(const char *path, uint8_t *
     return ESP_OK;
 }
 
-static bool system_ui_launcher_action_is_valid(const char *action)
-{
-    if (!action || action[0] != '/' || strstr(action, "..")) {
-        return false;
-    }
-    return true;
-}
-
-static bool system_ui_launcher_icon_path_is_valid(const char *path)
-{
-    size_t len;
-
-    if (!path || path[0] != '/' || strstr(path, "..")) {
-        return false;
-    }
-    len = strlen(path);
-    return (len > 4 && strcasecmp(path + len - 4, ".jpg") == 0) || (len > 5 && strcasecmp(path + len - 5, ".jpeg") == 0);
-}
-
 static void system_ui_launcher_unload_app_icon(system_ui_launcher_app_t *app)
 {
     if (!app) {
@@ -304,26 +285,11 @@ static esp_err_t system_ui_launcher_load_app_icon(system_ui_launcher_app_t *app,
     return ESP_OK;
 }
 
-static int system_ui_launcher_compare_app(const system_ui_launcher_app_t *a, const system_ui_launcher_app_t *b)
-{
-    if (a->order != b->order) {
-        return a->order - b->order;
-    }
-    return strcmp(a->title, b->title);
-}
-
-static void system_ui_launcher_insert_app_sorted(system_ui_launcher_app_t *app)
-{
-    system_ui_launcher_app_t **cursor = &s_ui.launcher_apps;
-
-    while (*cursor && system_ui_launcher_compare_app(*cursor, app) <= 0) {
-        cursor = &(*cursor)->next;
-    }
-    app->next = *cursor;
-    *cursor = app;
-    s_ui.launcher_app_count++;
-}
-
+/* NOTE: the launcher's app list has no producer since the skill catalog was
+ * removed with the Agent stack, so the home screen never creates a launcher
+ * page (see system_ui_create_home_tile_locked: LV_DIR_NONE when the count is
+ * zero). The sorted-insert and action-path helpers went with it. Wiring this
+ * grid to a Lua-derived app source is the open follow-up. */
 esp_err_t system_ui_launcher_load_locked(void)
 {
     system_ui_launcher_unload_icons();

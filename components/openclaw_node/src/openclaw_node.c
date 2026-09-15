@@ -111,6 +111,26 @@ static esp_err_t send_json(cJSON *root)
     return err;
 }
 
+/* Turns a command failure into something the Gateway can act on.
+ *
+ * The command handler returns plain esp_err_t values, so without this every
+ * failure - malformed arguments, an over-long payload, an unknown command -
+ * reaches the caller as the same opaque "command failed", and the operator has
+ * to guess which limit was hit. */
+static const char *describe_command_error(esp_err_t err)
+{
+    switch (err) {
+    case ESP_ERR_INVALID_ARG:   return "invalid arguments";
+    case ESP_ERR_INVALID_SIZE:  return "payload too large";
+    case ESP_ERR_NOT_FOUND:     return "unknown command";
+    case ESP_ERR_TIMEOUT:       return "device busy";
+    case ESP_ERR_NO_MEM:        return "out of memory";
+    case ESP_ERR_INVALID_STATE: return "device not ready";
+    case ESP_ERR_NOT_SUPPORTED: return "not supported";
+    default:                    return "command failed";
+    }
+}
+
 static esp_err_t send_invoke_result(const char *id, bool ok,
                                     const char *payload_json, const char *error_message)
 {
@@ -183,7 +203,7 @@ static esp_err_t send_connect(void)
     for (size_t i = 0; i < s_node.cfg.command_count; ++i) cJSON_AddItemToArray(commands, cJSON_CreateString(s_node.cfg.commands[i]));
     cJSON_AddObjectToObject(params, "permissions");
     if (s_node.cfg.gateway_token) { cJSON *auth = cJSON_AddObjectToObject(params, "auth"); cJSON_AddStringToObject(auth, "token", s_node.cfg.gateway_token); }
-    cJSON_AddStringToObject(params, "locale", "en-US");
+    /* "locale" is already set above; adding it twice emits a duplicate JSON key. */
     cJSON_AddStringToObject(params, "userAgent", "esp-openclaw/0.1.0");
     cJSON_AddStringToObject(device, "id", s_node.cfg.device_id);
     cJSON_AddStringToObject(device, "publicKey", s_node.cfg.public_key_b64url);
@@ -228,7 +248,21 @@ static void handle_frame(const char *data, size_t len)
             cJSON *id = cJSON_GetObjectItem(payload, "id"); cJSON *command = cJSON_GetObjectItem(payload, "command"); cJSON *params = cJSON_GetObjectItem(payload, "paramsJSON");
             char result[2048] = "{}";
             if (!cJSON_IsString(id) || !cJSON_IsString(command) || !command_declared(command->valuestring) || !s_node.cfg.command_cb) { send_invoke_result(cJSON_IsString(id) ? id->valuestring : "invoke", false, NULL, "command not allowed"); }
-            else { esp_err_t err = s_node.cfg.command_cb(command->valuestring, cJSON_IsString(params) ? params->valuestring : "{}", result, sizeof(result), s_node.cfg.user_ctx); send_invoke_result(id->valuestring, err == ESP_OK, result, "command failed"); }
+            else {
+                esp_err_t err = s_node.cfg.command_cb(command->valuestring,
+                                                      cJSON_IsString(params) ? params->valuestring : "{}",
+                                                      result, sizeof(result), s_node.cfg.user_ctx);
+                /* Name the specific reason, not just "it failed". */
+                char message[96];
+                snprintf(message, sizeof(message), "%s (%s)",
+                         describe_command_error(err), esp_err_to_name(err));
+                if (err != ESP_OK) {
+                    /* Mirror it to the serial log: the Gateway only sees the
+                       reply, so a headless retry would otherwise be silent. */
+                    ESP_LOGW(TAG, "Command '%s' rejected: %s", command->valuestring, message);
+                }
+                send_invoke_result(id->valuestring, err == ESP_OK, result, message);
+            }
         }
     } else if (cJSON_IsString(type) && strcmp(type->valuestring, "res") == 0) {
         cJSON *payload = cJSON_GetObjectItem(root, "payload");

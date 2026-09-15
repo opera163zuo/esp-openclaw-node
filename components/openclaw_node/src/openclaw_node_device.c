@@ -24,6 +24,7 @@
 #include "claw_cap.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <math.h>
 
 static const char *s_commands[] = {
@@ -161,6 +162,9 @@ static esp_err_t set_backlight(const char *params_json, char *out, size_t size)
         cJSON_Delete(params);
         return ESP_ERR_INVALID_ARG;
     }
+    /* Copy out of the parsed tree before it is freed below: `level` points into
+       `params`, so reading it after cJSON_Delete() is a use-after-free. */
+    const int level_value = (int)level->valuedouble;
     err = esp_board_manager_get_periph_handle("ledc_backlight", &handle_ptr);
     if (err == ESP_OK) {
         ledc_handle = (periph_ledc_handle_t *)handle_ptr;
@@ -168,13 +172,13 @@ static esp_err_t set_backlight(const char *params_json, char *out, size_t size)
     }
     if (err == ESP_OK) {
         uint32_t max_duty = (1U << (uint32_t)ledc_cfg->duty_resolution) - 1U;
-        uint32_t duty = ((uint32_t)level->valuedouble * max_duty) / 100U;
+        uint32_t duty = ((uint32_t)level_value * max_duty) / 100U;
         err = ledc_set_duty(ledc_handle->speed_mode, ledc_handle->channel, duty);
         if (err == ESP_OK) err = ledc_update_duty(ledc_handle->speed_mode, ledc_handle->channel);
     }
     cJSON_Delete(params);
     if (err != ESP_OK) return err;
-    int n = snprintf(out, size, "{\"command\":\"device.backlight\",\"level\":%d}", (int)level->valuedouble);
+    int n = snprintf(out, size, "{\"command\":\"device.backlight\",\"level\":%d}", level_value);
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
@@ -295,9 +299,15 @@ static esp_err_t screen_text(const char *params_json, char *out, size_t size)
     cJSON *text_item = params ? cJSON_GetObjectItem(params, "text") : NULL;
     const char *text = cJSON_GetStringValue(text_item);
     esp_err_t err;
-    if (!text || !cJSON_IsString(text_item) || strlen(text) > 192) {
+    if (!text || !cJSON_IsString(text_item)) {
         cJSON_Delete(params);
         return ESP_ERR_INVALID_ARG;
+    }
+    /* A too-long payload is reported apart from a malformed one so the Gateway
+       can tell "shrink the text" from "fix the request". */
+    if (strlen(text) > SYSTEM_UI_SCREEN_TEXT_MAX) {
+        cJSON_Delete(params);
+        return ESP_ERR_INVALID_SIZE;
     }
     /* text points into the parsed tree, so this has to run before the delete. */
     char coverage[64];
@@ -328,10 +338,20 @@ static esp_err_t screen_fullscreen(const char *command, const char *params_json,
         cJSON *orientation_item = params ? cJSON_GetObjectItem(params, "orientation") : NULL;
         const char *text = cJSON_GetStringValue(item);
         const char *orientation = cJSON_GetStringValue(orientation_item);
-        if (!text || !cJSON_IsString(item) || strlen(text) > 192 ||
-            (orientation && strcmp(orientation, "portrait") != 0 && strcmp(orientation, "landscape") != 0)) {
+        if (!text || !cJSON_IsString(item)) {
             cJSON_Delete(params);
             return ESP_ERR_INVALID_ARG;
+        }
+        /* Case-insensitive, matching system_ui's own check: an orientation that
+           only differs in case must not pass there and fail here. */
+        if (orientation && strcasecmp(orientation, "portrait") != 0 &&
+            strcasecmp(orientation, "landscape") != 0) {
+            cJSON_Delete(params);
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (strlen(text) > SYSTEM_UI_SCREEN_TEXT_MAX) {
+            cJSON_Delete(params);
+            return ESP_ERR_INVALID_SIZE;
         }
         /* text points into the parsed tree, so this has to run before the delete. */
         write_coverage_field(text, coverage, sizeof(coverage));
