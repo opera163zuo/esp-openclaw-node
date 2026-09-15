@@ -70,6 +70,13 @@ bool http_server_require_auth(httpd_req_t *req)
     return true;
 }
 
+/* NOTE: this is the WebUI's own path check, separate from the one the Gateway
+ * commands go through (cap_files_path_is_valid in components/claw_capabilities/
+ * cap_files). The two are deliberately different shapes - cap_files resolves
+ * absolute paths against several roots with per-root read-only flags, while this
+ * one is confined to ctx->storage_base_path and only ever sees relative paths -
+ * but the traversal rule they share ("no .. anywhere") must stay identical. If
+ * you tighten one, tighten the other. */
 bool http_server_path_is_safe(const char *path)
 {
     return path && path[0] == '/' && strstr(path, "..") == NULL;

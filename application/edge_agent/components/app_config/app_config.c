@@ -102,28 +102,6 @@ esp_err_t app_config_load(app_config_t *config)
         }
     }
 
-    for (size_t i = 0; i < sizeof(s_fields) / sizeof(s_fields[0]); ++i) {
-        bool exists = false;
-
-        if (strcmp(s_fields[i].key, "http_allow_ls") != 0) {
-            continue;
-        }
-
-        esp_err_t err = settings_store_has_key(s_fields[i].key, &exists);
-        if (err != ESP_OK) {
-            return err;
-        }
-        if (exists) {
-            continue;
-        }
-
-        err = settings_store_set_string(s_fields[i].key,
-                                        app_config_field_ptr(config, &s_fields[i]));
-        if (err != ESP_OK) {
-            return err;
-        }
-    }
-
     return ESP_OK;
 }
 

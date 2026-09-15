@@ -128,6 +128,12 @@ static bool cap_files_is_hidden_name(const char *name)
     return name && name[0] == '.';
 }
 
+/* NOTE: the WebUI has its own path check (http_server_path_is_safe in the
+ * edge_agent http_server component) because it works with relative paths under a
+ * single writable base. This function is the one the Gateway commands use, and it
+ * is the stricter of the two: it also enforces the per-root read-only flag. The
+ * traversal rule they share ("no .. anywhere") must stay identical - if you
+ * tighten one, tighten the other. */
 static bool cap_files_path_is_valid(const char *path)
 {
     if (!path || !path[0]) {
