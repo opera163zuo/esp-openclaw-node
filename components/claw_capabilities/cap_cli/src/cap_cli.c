@@ -326,8 +326,7 @@ static claw_cap_descriptor_t s_cli_descriptors[] = {
         .family = "system",
         .description = NULL,
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = CAP_CLI_INPUT_SCHEMA_JSON,
+                .input_schema_json = CAP_CLI_INPUT_SCHEMA_JSON,
         .execute = cap_cli_execute,
     },
 };

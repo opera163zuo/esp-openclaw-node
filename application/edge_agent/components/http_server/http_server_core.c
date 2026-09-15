@@ -58,7 +58,6 @@ esp_err_t http_server_init(const http_server_config_t *config)
 static void http_server_close_fn(httpd_handle_t hd, int sockfd)
 {
     (void)hd;
-    http_server_webim_ws_fd_remove(sockfd);
     close(sockfd);
 }
 
@@ -89,7 +88,6 @@ esp_err_t http_server_start(void)
 
     ESP_RETURN_ON_ERROR(httpd_start(&s_ctx.server, &config), TAG, "Failed to start HTTP server");
     ESP_RETURN_ON_ERROR(http_server_register_assets_routes(s_ctx.server), TAG, "Failed to register assets routes");
-    ESP_RETURN_ON_ERROR(http_server_register_capabilities_routes(s_ctx.server), TAG, "Failed to register capability routes");
     ESP_RETURN_ON_ERROR(http_server_register_lua_modules_routes(s_ctx.server), TAG, "Failed to register Lua module routes");
     ESP_RETURN_ON_ERROR(http_server_register_config_routes(s_ctx.server), TAG, "Failed to register config routes");
     ESP_RETURN_ON_ERROR(http_server_register_status_routes(s_ctx.server), TAG, "Failed to register status routes");
@@ -97,8 +95,6 @@ esp_err_t http_server_start(void)
 #if CONFIG_APP_CLAW_LUA_MODULE_HTTP_SERVER
     ESP_RETURN_ON_ERROR(http_server_register_lua_app_routes(s_ctx.server), TAG, "Failed to register Lua app routes");
 #endif
-    ESP_RETURN_ON_ERROR(http_server_register_wechat_routes(s_ctx.server), TAG, "Failed to register WeChat routes");
-    ESP_RETURN_ON_ERROR(http_server_register_webim_routes(s_ctx.server), TAG, "Failed to register Web IM routes");
     ESP_RETURN_ON_ERROR(httpd_register_err_handler(s_ctx.server, HTTPD_404_NOT_FOUND, http_server_captive_404_handler),
                         TAG, "Failed to register captive 404 handler");
 

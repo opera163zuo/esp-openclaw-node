@@ -76,3 +76,24 @@ repos:
         (?x)^(
           .*.patch|
         )$
+  - repo: local
+    hooks:
+      - id: font-character-coverage
+        name: font subset covers every character the firmware can display
+        # Runs the end-to-end character audit: repository strings against the
+        # character lists, and those lists against the shipped font assets.
+        # `language: python` makes pre-commit install fontTools into an isolated
+        # environment, so no local setup is needed beyond `pre-commit install`.
+        #
+        # The `--font` half matters: a character can be listed in character.txt
+        # yet still be absent from the generated font (U+3000 IDEOGRAPHIC SPACE
+        # slipped through exactly that way). Checking only the lists is not
+        # enough to prove the panel can draw a string.
+        entry: >-
+          python tools/font_subset/scan_chars.py --check
+          --font application/edge_agent/fatfs_image/system/fonts/NotoSansSC-Regular-sub.ttf
+          --emoji-font application/edge_agent/fatfs_image/system/fonts/NotoEmoji-Regular-sub.ttf
+        language: python
+        additional_dependencies: [fonttools]
+        pass_filenames: false
+        files: '^(components/|application/|tools/font_subset/|README(_EN)?\.md)'

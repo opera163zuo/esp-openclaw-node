@@ -18,19 +18,25 @@ type BasicForm = {
   ap_ssid: string;
   ap_password: string;
   ap_behavior: string;
+  openclaw_gateway_url: string;
+  openclaw_gateway_token: string;
+  openclaw_device_family: string;
   time_timezone: string;
 };
 
 export const BasicPage: Component<{ onRestartRequest: () => void }> = (props) => {
   const tab = createConfigTab<BasicForm>({
     tab: 'basic',
-    groups: ['wifi', 'time'],
+    groups: ['wifi', 'openclaw', 'time'],
     toForm: (config: Partial<AppConfig>) => ({
       wifi_ssid: config.wifi_ssid ?? '',
       wifi_password: config.wifi_password ?? '',
       ap_ssid: config.ap_ssid ?? '',
       ap_password: config.ap_password ?? '',
       ap_behavior: config.ap_behavior ?? 'keep',
+      openclaw_gateway_url: config.openclaw_gateway_url ?? '',
+      openclaw_gateway_token: config.openclaw_gateway_token ?? '',
+      openclaw_device_family: config.openclaw_device_family ?? 'm5stack-sticks3',
       time_timezone: config.time_timezone ?? '',
     }),
     fromForm: (form) => ({
@@ -39,6 +45,9 @@ export const BasicPage: Component<{ onRestartRequest: () => void }> = (props) =>
       ap_ssid: form.ap_ssid.trim(),
       ap_password: form.ap_password,
       ap_behavior: form.ap_behavior,
+      openclaw_gateway_url: form.openclaw_gateway_url.trim(),
+      openclaw_gateway_token: form.openclaw_gateway_token,
+      openclaw_device_family: form.openclaw_device_family.trim(),
       time_timezone: form.time_timezone.trim(),
     }),
   });
@@ -156,6 +165,32 @@ export const BasicPage: Component<{ onRestartRequest: () => void }> = (props) =>
               <option value="keep">{t('apBehaviorKeep') as string}</option>
               <option value="close_on_sta">{t('apBehaviorCloseOnSta') as string}</option>
             </SelectInput>
+          </div>
+        </StaticConfigBlock>
+        <StaticConfigBlock title={t('sectionOpenClaw') as string}>
+          <div class="grid gap-3 sm:grid-cols-2 pt-2">
+            <TextInput
+              full
+              label={t('openclawGatewayUrl')}
+              placeholder="wss://gateway.example/ws"
+              hint={t('openclawGatewayUrlHint') as string}
+              value={tab.form.openclaw_gateway_url}
+              onInput={(event) => tab.setForm('openclaw_gateway_url', event.currentTarget.value)}
+            />
+            <TextInput
+              type="password"
+              label={t('openclawGatewayToken')}
+              autocomplete="new-password"
+              hint={t('openclawGatewayTokenHint') as string}
+              value={tab.form.openclaw_gateway_token}
+              onInput={(event) => tab.setForm('openclaw_gateway_token', event.currentTarget.value)}
+            />
+            <TextInput
+              label={t('openclawDeviceFamily')}
+              hint={t('openclawDeviceFamilyHint') as string}
+              value={tab.form.openclaw_device_family}
+              onInput={(event) => tab.setForm('openclaw_device_family', event.currentTarget.value)}
+            />
           </div>
         </StaticConfigBlock>
         <CollapsibleConfigBlock title={t('sectionAdvanced') as string} defaultOpen={false}>

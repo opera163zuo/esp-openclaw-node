@@ -19,15 +19,8 @@ extern "C" {
  *         an absolute path derived from a home plus a fixed subdirectory.
  */
 typedef struct {
-    char fatfs_base_path[APP_CLAW_PATH_LEN];          /**< Writable data root */
-    char memory_session_root[APP_CLAW_PATH_LEN];      /**< Per-session conversation state */
-    char memory_root_dir[APP_CLAW_PATH_LEN];          /**< Long-term memory store */
-    char skills_root_dir[APP_CLAW_PATH_LEN];          /**< Writable skills root */
-    char system_skills_root_dir[APP_CLAW_PATH_LEN];   /**< Read-only firmware-baked skills root */
-    char lua_root_dir[APP_CLAW_PATH_LEN];             /**< Lua scripts root */
-    char router_rules_path[APP_CLAW_FILE_PATH_LEN];   /**< Event router rules file */
-    char scheduler_rules_path[APP_CLAW_FILE_PATH_LEN];/**< Scheduler rules file */
-    char im_attachment_root[APP_CLAW_PATH_LEN];       /**< IM attachment inbox */
+    char fatfs_base_path[APP_CLAW_PATH_LEN];  /**< Writable data root */
+    char lua_root_dir[APP_CLAW_PATH_LEN];     /**< User Lua scripts root */
 } app_claw_storage_paths_t;
 
 #ifdef __cplusplus

@@ -5,7 +5,6 @@
  */
 #include "http_server_priv.h"
 
-#include <ctype.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,39 +41,12 @@ static const config_field_def_t CONFIG_FIELDS[] = {
     CONFIG_FIELD("wifi",         ap_password),
     CONFIG_FIELD("wifi",         ap_behavior),
 
-    CONFIG_FIELD("llm",          llm_api_key),
-    CONFIG_FIELD("llm",          llm_backend_type),
-    CONFIG_FIELD("llm",          llm_model),
-    CONFIG_FIELD("llm",          llm_base_url),
-    CONFIG_FIELD("llm",          llm_auth_type),
-    CONFIG_FIELD("llm",          llm_timeout_ms),
-    CONFIG_FIELD("llm",          llm_max_tokens),
-    CONFIG_FIELD("llm",          llm_default_image_max_bytes),
-    CONFIG_FIELD("llm",          llm_max_tokens_field),
-    CONFIG_FIELD("llm",          llm_supports_tools),
-    CONFIG_FIELD("llm",          llm_supports_vision),
-    CONFIG_FIELD("llm",          llm_image_remote_url_only),
-
-    CONFIG_FIELD("im",           qq_app_id),
-    CONFIG_FIELD("im",           qq_app_secret),
-    CONFIG_FIELD("im",           qq_msg_type),
-    CONFIG_FIELD("im",           feishu_app_id),
-    CONFIG_FIELD("im",           feishu_app_secret),
-    CONFIG_FIELD("im",           tg_bot_token),
-    CONFIG_FIELD("im",           wechat_token),
-    CONFIG_FIELD("im",           wechat_base_url),
-    CONFIG_FIELD("im",           wechat_cdn_base_url),
-    CONFIG_FIELD("im",           wechat_account_id),
-
-    CONFIG_FIELD("search",       search_brave_key),
-    CONFIG_FIELD("search",       search_tavily_key),
-    CONFIG_FIELD("search",       search_http_allowlist),
+    CONFIG_FIELD("openclaw",     openclaw_gateway_url),
+    CONFIG_FIELD("openclaw",     openclaw_gateway_token),
+    CONFIG_FIELD("openclaw",     openclaw_device_family),
 
     CONFIG_FIELD("capabilities", enabled_cap_groups),
-    CONFIG_FIELD("capabilities", llm_visible_cap_groups),
-
-    CONFIG_FIELD("skills",       enabled_lua_modules),
-
+    CONFIG_FIELD("lua",          enabled_lua_modules),
     CONFIG_FIELD("time",         time_timezone),
 };
 
@@ -138,36 +110,6 @@ static const char *field_value(const app_config_t *config, const config_field_de
 static char *field_mutable(app_config_t *config, const config_field_def_t *field)
 {
     return ((char *)config) + field->offset;
-}
-
-static bool is_positive_decimal_string(const char *value)
-{
-    const unsigned char *cursor = (const unsigned char *)value;
-
-    if (!cursor || !cursor[0]) {
-        return false;
-    }
-    if (cursor[0] == '0') {
-        return false;
-    }
-
-    while (*cursor) {
-        if (!isdigit(*cursor)) {
-            return false;
-        }
-        cursor++;
-    }
-
-    return true;
-}
-
-static bool is_boolean_string(const char *value)
-{
-    return value &&
-           (strcmp(value, "true") == 0 ||
-            strcmp(value, "false") == 0 ||
-            strcmp(value, "1") == 0 ||
-            strcmp(value, "0") == 0);
 }
 
 static esp_err_t validate_wifi_config_fields(const app_config_t *config, const char **message)
@@ -323,28 +265,6 @@ static esp_err_t config_post_handler(httpd_req_t *req)
         if (!cJSON_IsString(item)) {
             continue;
         }
-        if (strcmp(field->name, "llm_max_tokens") == 0 ||
-                strcmp(field->name, "llm_default_image_max_bytes") == 0) {
-            if (!is_positive_decimal_string(item->valuestring)) {
-                cJSON_Delete(root);
-                free(config);
-                return httpd_resp_send_err(req,
-                                           HTTPD_400_BAD_REQUEST,
-                                           strcmp(field->name, "llm_max_tokens") == 0 ?
-                                               "llm_max_tokens must be a positive integer" :
-                                               "llm_default_image_max_bytes must be a positive integer");
-            }
-        }
-        if ((strcmp(field->name, "llm_supports_tools") == 0 ||
-                strcmp(field->name, "llm_supports_vision") == 0 ||
-                strcmp(field->name, "llm_image_remote_url_only") == 0) &&
-                !is_boolean_string(item->valuestring)) {
-            cJSON_Delete(root);
-            free(config);
-            return httpd_resp_send_err(req,
-                                       HTTPD_400_BAD_REQUEST,
-                                       "LLM boolean fields must be true/false");
-        }
         strlcpy(field_mutable(config, field), item->valuestring, field->size);
         applied_count++;
     }
@@ -362,6 +282,12 @@ static esp_err_t config_post_handler(httpd_req_t *req)
     if (err != ESP_OK) {
         free(config);
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, wifi_config_error);
+    }
+    const char *openclaw_config_error = NULL;
+    err = app_config_validate_openclaw(config, &openclaw_config_error);
+    if (err != ESP_OK) {
+        free(config);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, openclaw_config_error);
     }
 
     err = ctx->services.save_config(config);

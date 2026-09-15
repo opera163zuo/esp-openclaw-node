@@ -4,5 +4,6 @@ idf_component_register(
     INCLUDE_DIRS
         "include"
     REQUIRES
+        claw_paths
         claw_cap
 )

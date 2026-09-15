@@ -5,7 +5,6 @@
  */
 #include "app_claw.h"
 #include "app_fs.h"
-#include "claw_version.h"
 #include "claw_paths.h"
 #include "edge_agent_version.h"
 #include <string.h>
@@ -26,11 +25,7 @@
 #include "openclaw_node_identity.h"
 #include "openclaw_node_device.h"
 #include "openclaw_node.h"
-#include "openclaw_node_config.h"
 #include "freertos/task.h"
-#if CONFIG_APP_CLAW_CAP_IM_WECHAT
-#include "cap_im_wechat.h"
-#endif
 #include "app_config.h"
 
 #define APP_ENABLE_MEM_LOG        (0)
@@ -39,6 +34,8 @@ static const char *TAG = "app";
 
 static app_config_t *s_config;
 static app_claw_config_t *s_claw_config;
+
+static void start_openclaw_node_if_configured(const app_config_t *app_config);
 
 static esp_err_t app_allocate_runtime_state(void)
 {
@@ -110,6 +107,7 @@ static esp_err_t main_save_config(const app_config_t *config)
 
     ESP_RETURN_ON_FALSE(config, ESP_ERR_INVALID_ARG, TAG, "config is NULL");
     ESP_RETURN_ON_ERROR(app_config_validate_wifi(config, NULL), TAG, "Invalid Wi-Fi config");
+    ESP_RETURN_ON_ERROR(app_config_validate_openclaw(config, NULL), TAG, "Invalid OpenClaw config");
 
     err = app_config_save(config);
     if (err != ESP_OK) {
@@ -118,59 +116,25 @@ static esp_err_t main_save_config(const app_config_t *config)
 
     claw_config = calloc(1, sizeof(*claw_config));
     if (!claw_config) {
-        ESP_LOGW(TAG, "Failed to allocate Claw config for runtime update");
+        ESP_LOGW(TAG, "Failed to allocate runtime config");
         return ESP_OK;
     }
     app_config_to_claw(config, claw_config);
     err = app_claw_update_config(claw_config);
     free(claw_config);
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "Failed to update running Claw config: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "Failed to update runtime config: %s", esp_err_to_name(err));
+    }
+
+    /* The Native Node stores pointers to the app config. Copy the new values
+     * before restarting the WebSocket client so Gateway changes take effect
+     * immediately, without rebuilding or reflashing the firmware. */
+    if (s_config) {
+        *s_config = *config;
+        openclaw_node_stop();
+        start_openclaw_node_if_configured(s_config);
     }
     return ESP_OK;
-}
-
-static void main_copy_claw_to_app_config(const app_claw_config_t *src, app_config_t *dst)
-{
-    strlcpy(dst->llm_api_key, src->llm_api_key, sizeof(dst->llm_api_key));
-    strlcpy(dst->llm_backend_type, src->llm_backend_type, sizeof(dst->llm_backend_type));
-    strlcpy(dst->llm_model, src->llm_model, sizeof(dst->llm_model));
-    strlcpy(dst->llm_base_url, src->llm_base_url, sizeof(dst->llm_base_url));
-    strlcpy(dst->llm_auth_type, src->llm_auth_type, sizeof(dst->llm_auth_type));
-    strlcpy(dst->llm_timeout_ms, src->llm_timeout_ms, sizeof(dst->llm_timeout_ms));
-    strlcpy(dst->llm_max_tokens, src->llm_max_tokens, sizeof(dst->llm_max_tokens));
-    strlcpy(dst->llm_default_image_max_bytes,
-            src->llm_default_image_max_bytes,
-            sizeof(dst->llm_default_image_max_bytes));
-    strlcpy(dst->llm_max_tokens_field, src->llm_max_tokens_field, sizeof(dst->llm_max_tokens_field));
-    strlcpy(dst->llm_supports_tools, src->llm_supports_tools, sizeof(dst->llm_supports_tools));
-    strlcpy(dst->llm_supports_vision, src->llm_supports_vision, sizeof(dst->llm_supports_vision));
-    strlcpy(dst->llm_image_remote_url_only,
-            src->llm_image_remote_url_only,
-            sizeof(dst->llm_image_remote_url_only));
-}
-
-static esp_err_t main_save_claw_config(const app_claw_config_t *config, void *user_ctx)
-{
-    esp_err_t err;
-    app_config_t *app_config = NULL;
-
-    (void)user_ctx;
-    ESP_RETURN_ON_FALSE(config, ESP_ERR_INVALID_ARG, TAG, "config is NULL");
-
-    app_config = calloc(1, sizeof(*app_config));
-    ESP_RETURN_ON_FALSE(app_config, ESP_ERR_NO_MEM, TAG, "Failed to allocate app config for Claw save");
-
-    err = app_config_load(app_config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to load config for Claw save: %s", esp_err_to_name(err));
-        free(app_config);
-        return err;
-    }
-    main_copy_claw_to_app_config(config, app_config);
-    err = app_config_save(app_config);
-    free(app_config);
-    return err;
 }
 
 static esp_err_t main_get_wifi_status(http_server_wifi_status_t *status)
@@ -202,55 +166,6 @@ static esp_err_t main_restart_device(void)
     return ESP_OK;
 }
 
-#if CONFIG_APP_CLAW_CAP_IM_WECHAT
-static esp_err_t main_wechat_login_start(const char *account_id, bool force)
-{
-    return cap_im_wechat_qr_login_start(account_id, force);
-}
-
-static esp_err_t main_wechat_login_get_status(http_server_wechat_login_status_t *status)
-{
-    esp_err_t ret = ESP_OK;
-    cap_im_wechat_qr_login_status_t *raw = NULL;
-
-    ESP_RETURN_ON_FALSE(status, ESP_ERR_INVALID_ARG, TAG, "status is NULL");
-
-    raw = calloc(1, sizeof(*raw));
-    ESP_RETURN_ON_FALSE(raw, ESP_ERR_NO_MEM, TAG, "Failed to allocate login status");
-
-    ESP_GOTO_ON_ERROR(cap_im_wechat_qr_login_get_status(raw), cleanup, TAG,
-                      "Failed to query WeChat login status");
-
-    memset(status, 0, sizeof(*status));
-    status->active = raw->active;
-    status->configured = raw->configured;
-    status->completed = raw->completed;
-    status->persisted = raw->persisted;
-    strlcpy(status->session_key, raw->session_key, sizeof(status->session_key));
-    strlcpy(status->status, raw->status, sizeof(status->status));
-    strlcpy(status->message, raw->message, sizeof(status->message));
-    strlcpy(status->qr_data_url, raw->qr_data_url, sizeof(status->qr_data_url));
-    strlcpy(status->account_id, raw->account_id, sizeof(status->account_id));
-    strlcpy(status->user_id, raw->user_id, sizeof(status->user_id));
-    strlcpy(status->token, raw->token, sizeof(status->token));
-    strlcpy(status->base_url, raw->base_url, sizeof(status->base_url));
-
-cleanup:
-    free(raw);
-    return ret;
-}
-
-static esp_err_t main_wechat_login_cancel(void)
-{
-    return cap_im_wechat_qr_login_cancel();
-}
-
-static esp_err_t main_wechat_login_mark_persisted(void)
-{
-    return cap_im_wechat_qr_login_mark_persisted();
-}
-#endif
-
 static esp_err_t openclaw_node_sign_cb(const char *payload,
                                        char *signature_out,
                                        size_t signature_size,
@@ -260,9 +175,9 @@ static esp_err_t openclaw_node_sign_cb(const char *payload,
     return openclaw_node_identity_sign_b64url(payload, signature_out, signature_size);
 }
 
-static void start_openclaw_node_if_configured(void)
+static void start_openclaw_node_if_configured(const app_config_t *app_config)
 {
-    if (OPENCLAW_NODE_GATEWAY_URL[0] == '\0') {
+    if (!app_config || app_config->openclaw_gateway_url[0] == '\0') {
         ESP_LOGI(TAG, "OpenClaw Native Node disabled: no Gateway URL configured");
         return;
     }
@@ -277,21 +192,23 @@ static void start_openclaw_node_if_configured(void)
         return;
     }
     openclaw_node_config_t config = {
-        .gateway_url = OPENCLAW_NODE_GATEWAY_URL,
-        .gateway_token = OPENCLAW_NODE_GATEWAY_TOKEN[0] ? OPENCLAW_NODE_GATEWAY_TOKEN : NULL,
+        .gateway_url = app_config->openclaw_gateway_url,
+        .gateway_token = app_config->openclaw_gateway_token[0] ? app_config->openclaw_gateway_token : NULL,
         .device_id = device_id,
         .public_key_b64url = public_key,
         .client_id = "node-host",
         .client_version = "0.1.0",
         .platform = "esp32",
-        .device_family = "m5stack-sticks3",
+        .device_family = app_config->openclaw_device_family[0] ? app_config->openclaw_device_family : "esp32",
         .commands = commands,
         .command_count = command_count,
         .sign_cb = openclaw_node_sign_cb,
         .command_cb = openclaw_node_device_command,
     };
     esp_err_t err = openclaw_node_start(&config);
-    if (err != ESP_OK) ESP_LOGW(TAG, "Native Node start failed: %s", esp_err_to_name(err));
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Native Node start failed: %s", esp_err_to_name(err));
+    }
 }
 
 static esp_err_t init_nvs(void)
@@ -365,8 +282,6 @@ void app_main(void)
     esp_log_level_set("http_reuse", ESP_LOG_WARN);
 
     ESP_LOGI(TAG, "Starting app");
-    ESP_LOGI(TAG, "ESP-Claw version: %s", claw_get_version());
-    ESP_LOGI(TAG, "ESP-Claw git version: %s", claw_get_git_version());
     ESP_LOGI(TAG, "Edge Agent version: %s", edge_agent_get_version());
     ESP_ERROR_CHECK(app_allocate_runtime_state());
     ESP_ERROR_CHECK(init_nvs());
@@ -403,12 +318,6 @@ void app_main(void)
             .save_config = main_save_config,
             .get_wifi_status = main_get_wifi_status,
             .restart_device = main_restart_device,
-#if CONFIG_APP_CLAW_CAP_IM_WECHAT
-            .wechat_login_start = main_wechat_login_start,
-            .wechat_login_get_status = main_wechat_login_get_status,
-            .wechat_login_cancel = main_wechat_login_cancel,
-            .wechat_login_mark_persisted = main_wechat_login_mark_persisted,
-#endif
         },
     }));
     ESP_ERROR_CHECK(wifi_manager_register_state_callback(on_wifi_state_changed, NULL));
@@ -465,12 +374,8 @@ void app_main(void)
         }
     }
 
-    ESP_ERROR_CHECK(app_claw_set_save_config_callback(main_save_claw_config, NULL));
     ESP_ERROR_CHECK(app_claw_start(s_claw_config));
-    start_openclaw_node_if_configured();
-#if CONFIG_APP_CLAW_CAP_IM_LOCAL
-    ESP_ERROR_CHECK(http_server_webim_bind_im());
-#endif
+    start_openclaw_node_if_configured(s_config);
 
     register_wifi_command();
 

@@ -48,36 +48,33 @@ The main entry point is `application/edge_agent/main/main.c`.
 
 ### Core Data Flow
 
-1. IM channels, scheduler jobs, Lua scripts, startup hooks, or CLI commands publish events or submit requests.
-2. `claw_event_router` matches events against the DATA root's `router_rules/router_rules.json` and can call capabilities, run scripts, run the agent, send messages, emit events, or drop events.
-3. `claw_core` builds context from memory, session history, skills, and other providers; calls the configured LLM backend; executes capability tool calls; persists context; and returns responses.
-4. Outbound messages are routed back through registered IM bindings or local/web channels.
+1. Boot initializes NVS, board peripherals, the system UI, storage roots, Wi-Fi AP/STA, and the local HTTP provisioning portal.
+2. The portal stores Wi-Fi and OpenClaw Gateway settings in NVS. The device does not collect LLM, memory, or IM credentials.
+3. Once Wi-Fi has an IP, the Native Node authenticates with Ed25519 and connects to the Gateway over WebSocket.
+4. Gateway-approved `node.invoke` calls dispatch through the fixed device-command allowlist. Lua scripts and LVGL remain available for live programming and display experiments.
 
 ## Key Subsystems
 
-- **Application shell** (`application/edge_agent/main/main.c`, `components/common/app_claw/`): boot flow, storage paths, capability registration, Lua module registration, CLI, and agent startup.
-- **Agent core** (`components/claw_modules/claw_core/`): request queue, context building, LLM backend runtime, tool-call loop, media inference, interrupts, context persistence, and response delivery.
-- **Event router** (`components/claw_modules/claw_event_router/`): declarative event routing and actions backed by router rules in FATFS.
-- **Capability registry** (`components/claw_modules/claw_cap/`): common registration and dispatch layer for model-callable capabilities.
-- **Capabilities** (`components/claw_capabilities/`): concrete agent capabilities such as Lua execution, files, IM platforms, MCP, skill management, router management, scheduler, session management, time, HTTP requests, web search, system, and LLM inspection.
-- **Memory** (`components/claw_modules/claw_memory/`): session history, profile/long-term memory providers, memory persistence, request gating, and stage notes.
-- **Skills** (`components/claw_modules/claw_skill/`, component `skills/` directories): user-facing skill documents and activation state.
-- **Lua modules** (`components/lua_modules/`): Lua drivers and higher-level modules for hardware, media, HTTP server, storage, threading, JSON, board manager, and capability calls.
+- **Application shell** (`application/edge_agent/main/main.c`, `components/common/app_claw/`): boot flow, storage paths, capability registration, Lua module registration, serial CLI, Wi-Fi, and Native Node startup.
+- **Native Node** (`components/openclaw_node/`): WebSocket transport, challenge/device-auth handshake, persistent identity, command claims, and hardware/file/Lua command dispatch.
+- **Capability registry** (`components/claw_modules/claw_cap/`): local registration and dispatch layer for the fixed device capabilities; it is not an LLM tool registry.
+- **Capabilities** (`components/claw_capabilities/`): only the sandboxed files and Lua runtime are built into this application.
+- **Lua modules** (`components/lua_modules/`): hardware drivers and higher-level modules for display, audio, storage, LVGL, HTTP server, and live scripting.
 - **Board manager** (`application/edge_agent/boards/`): board metadata, peripheral YAML, board setup code, board defaults, optional local components, and optional board FATFS overlays.
 - **FATFS images** (`application/edge_agent/fatfs_image/`): build-time source trees for the read-only SYSTEM image and writable DATA seed image.
-- **HTTP config service** (`application/edge_agent/components/http_server/`): local device configuration server and embedded frontend.
+- **HTTP config service** (`application/edge_agent/components/http_server/`): Wi-Fi/OpenClaw provisioning, status, files, Lua modules, and embedded frontend.
+- **Time sync** (`components/common/time_sync/`): standalone SNTP worker required by TLS before Gateway authentication.
 
 ### Runtime Path Rules
 
 The firmware uses two logical filesystem roots, configured at boot through `claw_paths`:
 
-- `CLAW_PATH_SYSTEM` is mounted at `/system`. It is read-only and contains firmware-baked skills, skill assets, built-in Lua modules, Lua docs/tests, board image overlays, and `.recovery` seed files.
+- `CLAW_PATH_SYSTEM` is mounted at `/system`. It is read-only and contains built-in Lua modules, Lua docs/tests, board image overlays, fonts, and recovery seed files.
 - `CLAW_PATH_DATA` is the writable storage root. It is `/fatfs` when flash storage is used, or the board-manager SD card mount point when an SD card is available.
 - Never hard-code `/fatfs` for writable paths in reusable code or docs. Use `claw_paths_join(CLAW_PATH_DATA, ...)` in C and `storage.get_root_dir()` plus `storage.join_path(...)` in Lua.
-- Firmware-baked skill scripts must be referenced with `{CUR_SKILL_DIR}/scripts/...` inside `SKILL.md`; do not write fixed `/fatfs/skills/...` paths.
-- Runtime-installed/user skills live under the DATA root's `skills/`. Firmware-baked skills live under `/system/skills/`; the skill registry scans both, with DATA skills taking priority when ids conflict.
-- Router rules, scheduler rules, memory, sessions, inbox, and user-generated files live under DATA. Recovery defaults are stored under `/system/.recovery` and copied into DATA only when missing.
-- Built-in Lua libraries are staged under `/system/scripts/builtin/lib`; generated Lua module docs/tests are bundled into the `builtin_lua_modules` skill and should be accessed via that skill's `{CUR_SKILL_DIR}` paths.
+- User Lua scripts live under the DATA root's `scripts/` sandbox. Built-in Lua libraries are staged under `/system/scripts/builtin/lib`.
+- Recovery defaults are stored under `/system/.recovery` and copied into DATA only when missing.
+- Board-specific `boards/<vendor>/<board>/fatfs_image/` content overlays the SYSTEM image at build time. Board image content does not target DATA and hidden board folders are not considered.
 - Board-specific `boards/<vendor>/<board>/fatfs_image/` content overlays the SYSTEM image at build time. Board image content does not target DATA and hidden board folders are not considered.
 
 ## Project-Specific Notes

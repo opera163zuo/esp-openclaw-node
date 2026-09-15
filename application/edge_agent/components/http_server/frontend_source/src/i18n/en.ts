@@ -72,6 +72,14 @@ export const en = {
   apBehaviorKeep: 'Keep On',
   apBehaviorCloseOnSta: 'Turn Off After Wi-Fi Connects',
 
+  sectionOpenClaw: 'OpenClaw Connection',
+  openclawGatewayUrl: 'Gateway WebSocket URL',
+  openclawGatewayUrlHint: 'Enter the OpenClaw Gateway ws:// or wss:// URL. Leave it empty to keep the Native Node disabled.',
+  openclawGatewayToken: 'Gateway Token (optional)',
+  openclawGatewayTokenHint: 'Fill this only when the Gateway requires a token. It is stored in device config and never logged.',
+  openclawDeviceFamily: 'Device family',
+  openclawDeviceFamilyHint: 'The device family reported to the Gateway. Defaults to m5stack-sticks3.',
+
   sectionStatusNetwork: 'Network',
   sectionStatusStorage: 'Storage',
   sysInfoWifi: 'Wi-Fi',
@@ -293,8 +301,12 @@ export const en = {
   fileFolderNameRequired: 'Enter a folder name.',
   setupEyebrow: 'First-Use Wizard',
   setupTitle: 'Finish Initial Device Setup',
-  setupIntro:
-    'Configure LLM, IM, and web search in order. Each step can be skipped and completed later from the settings pages.',
+  setupDescription: 'Connect Wi-Fi first, then enter the OpenClaw Gateway. The device runs no LLM or IM; Native Node provides live scripting and hardware control.',
+  setupOpenclawDescription: 'The Gateway owns Agent, LLM, Memory, and policy. The device connects and executes only approved hardware, display, file, and Lua commands.',
+  setupPairingHint: 'After saving and restarting, the device connects when Wi-Fi is ready. Approve the device and its command list in the Gateway.',
+  openclawGatewayUrlInvalid: 'The Gateway URL must start with ws:// or wss://.',
+  saving: 'Saving…',
+  setupIntro: 'Configure Wi-Fi and the OpenClaw Gateway.',
   setupStepLabel: 'Step {index}',
   setupStepLlm: 'Configure LLM',
   setupStepLlmDesc:

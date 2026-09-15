@@ -1,7 +1,7 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  esp_painter:
-    path: ../../common/esp_painter
+  display_ttf:
+    path: ../../common/display_ttf
 
   display_service:
     path: ../../common/display_service

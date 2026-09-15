@@ -8,10 +8,10 @@ idf_component_register(
     PRIV_INCLUDE_DIRS
         "src"
     REQUIRES
+        claw_paths
         claw_cap
-        claw_core
-        claw_skill
         display_service
+        display_ttf
         esp_board_manager
         esp_lcd
         esp_timer

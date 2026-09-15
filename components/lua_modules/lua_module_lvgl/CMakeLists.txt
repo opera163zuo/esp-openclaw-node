@@ -19,8 +19,8 @@ idf_component_register(
     INCLUDE_DIRS
         "src"
     REQUIRES
+        claw_paths
         cap_lua
-        claw_core
         esp_lcd
         esp_lcd_touch
         esp_timer

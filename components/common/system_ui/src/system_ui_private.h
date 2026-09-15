@@ -15,6 +15,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "display_ttf.h"
 #include "lvgl.h"
 #include "display_service.h"
 
@@ -30,7 +31,11 @@ extern "C" {
 #define SYSTEM_UI_TASK_STACK 8192
 #define SYSTEM_UI_TASK_PRIO 5
 #define SYSTEM_UI_STOP_TIMEOUT_MS 5000
-#define SYSTEM_UI_DEFAULT_FONT_PATH "fonts/NotoSansSC-Regular-sub.ttf"
+/* The font assets and the emoji fallback chain are defined once in
+   display_ttf, so the LVGL system UI and the raw Lua display path always agree
+   on what a given code point looks like. */
+#define SYSTEM_UI_DEFAULT_FONT_PATH DISPLAY_TTF_DEFAULT_FONT_PATH
+#define SYSTEM_UI_DEFAULT_EMOJI_FONT_PATH DISPLAY_TTF_DEFAULT_EMOJI_PATH
 #define SYSTEM_UI_DEFAULT_FONT_SIZE 24
 #define SYSTEM_UI_CLOCK_FONT_SIZE 72
 #define SYSTEM_UI_PATH_MAX 256
@@ -197,10 +202,8 @@ typedef struct {
     lv_obj_t *time_label;
     lv_obj_t *date_label;
     lv_obj_t *notice_label;
-    lv_obj_t *notice_icon;
     lv_obj_t *fullscreen_screen;
     lv_obj_t *fullscreen_label;
-    lv_obj_t *fullscreen_icon;
     lv_timer_t *home_clock_timer;
     lv_obj_t *overlay_root;
     lv_obj_t *overlay_dot;
@@ -238,8 +241,15 @@ typedef struct {
     lv_font_t *font;
     lv_font_t *notice_font;
     lv_font_t *clock_font;
+    /* Monochrome emoji companions, one per UI size, chained through
+       lv_font_t.fallback so emoji render as glyphs instead of tofu. */
+    lv_font_t *emoji_font;
+    lv_font_t *notice_emoji_font;
+    lv_font_t *clock_emoji_font;
     uint8_t *font_data;
     size_t font_data_size;
+    uint8_t *emoji_font_data;
+    size_t emoji_font_data_size;
     uint32_t width;
     uint32_t height;
     SemaphoreHandle_t callback_mutex;

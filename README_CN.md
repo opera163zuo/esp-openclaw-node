@@ -40,16 +40,9 @@ M5Stack StickS3 / ESP32-S3
   └─ identity, display, audio, and bounded hardware commands
 ```
 
-## 安全
+## 配网与安全
 
-默认固件保持空连接配置：
-
-```c
-#define OPENCLAW_NODE_GATEWAY_URL ""
-#define OPENCLAW_NODE_GATEWAY_TOKEN ""
-```
-
-Gateway Token、Wi-Fi 密码、API key、私钥和连接字符串不得提交 Git 或写入文档、日志。联调结束后恢复空 URL/Token，并将 Gateway 恢复为 `bind=loopback`。不开放任意 Shell、任意终端、`lua.eval` 或任意命令字符串。
+Gateway URL、可选 Token 和设备类型通过本地 AP 配网门户保存到 NVS；URL 留空时 Native Node 不启动，不再使用编译期连接宏。Gateway Token、Wi-Fi 密码、API key、私钥和连接字符串不得提交 Git 或写入文档、日志。设备身份种子保存在 NVS；当前开发配置未启用 Flash/NVS 加密，生产设备必须先设计好密钥、备份和恢复流程，再启用加密或使用安全元件。不要直接在已有设备上开启加密并烧录。不开放任意 Shell、任意终端、`lua.eval` 或任意命令字符串。
 
 ## 构建
 

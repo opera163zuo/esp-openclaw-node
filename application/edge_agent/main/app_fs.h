@@ -25,8 +25,8 @@ const char *app_fs_storage_base_path(void);
 /**
  * @brief  Base path of the read-only system filesystem.
  *
- *         Holds firmware-baked content (skills, built-in Lua scripts/docs and
- *         the recovery seed files). Valid only after app_fs_init() has run.
+ *         Holds firmware-baked content (built-in Lua scripts/docs, fonts, and
+ *         recovery seed files). Valid only after app_fs_init() has run.
  *
  * @return Mount-point string owned by this module (never NULL).
  */

@@ -408,12 +408,20 @@ void lua_lvgl_apply_default_font_locked(lv_obj_t *obj)
 void lua_lvgl_destroy_default_font_locked(void)
 {
     if (s_lvgl.default_font) {
+        s_lvgl.default_font->fallback = NULL;
         lv_tiny_ttf_destroy(s_lvgl.default_font);
         s_lvgl.default_font = NULL;
+    }
+    if (s_lvgl.default_emoji_font) {
+        lv_tiny_ttf_destroy(s_lvgl.default_emoji_font);
+        s_lvgl.default_emoji_font = NULL;
     }
     free(s_lvgl.default_font_data);
     s_lvgl.default_font_data = NULL;
     s_lvgl.default_font_data_size = 0;
+    free(s_lvgl.default_emoji_font_data);
+    s_lvgl.default_emoji_font_data = NULL;
+    s_lvgl.default_emoji_font_data_size = 0;
     s_lvgl.default_font_size = 0;
     s_lvgl.default_font_cache_size = 0;
     s_lvgl.default_font_path[0] = '\0';
@@ -422,7 +430,9 @@ void lua_lvgl_destroy_default_font_locked(void)
 esp_err_t lua_lvgl_create_default_font_locked(const char *font_path, uint32_t font_size, uint32_t cache_size)
 {
     uint8_t *font_data = NULL;
+    uint8_t *emoji_data = NULL;
     size_t font_data_size = 0;
+    size_t emoji_data_size = 0;
     lv_font_t *font;
     int written;
     esp_err_t err;
@@ -451,12 +461,36 @@ esp_err_t lua_lvgl_create_default_font_locked(const char *font_path, uint32_t fo
         return ESP_FAIL;
     }
 
+    /* Chain the emoji subset behind the default font. It is optional: without
+       it labels still render, emoji just show the missing-glyph box. */
+    if (lua_lvgl_read_default_font_data(LUA_MODULE_LVGL_DEFAULT_EMOJI_FONT_PATH,
+                                        &emoji_data, &emoji_data_size) == ESP_OK) {
+        s_lvgl.default_emoji_font = lv_tiny_ttf_create_data_ex(emoji_data, emoji_data_size, font_size,
+                                                               LV_FONT_KERNING_NORMAL, (size_t)cache_size);
+        if (s_lvgl.default_emoji_font) {
+            font->fallback = s_lvgl.default_emoji_font;
+        } else {
+            ESP_LOGW(TAG, "default emoji font create failed: size=%lu", (unsigned long)font_size);
+            free(emoji_data);
+            emoji_data = NULL;
+            emoji_data_size = 0;
+        }
+    } else {
+        ESP_LOGW(TAG, "default emoji font data load failed: %s", LUA_MODULE_LVGL_DEFAULT_EMOJI_FONT_PATH);
+        emoji_data = NULL;
+        emoji_data_size = 0;
+    }
+
     s_lvgl.default_font = font;
     s_lvgl.default_font_data = font_data;
     s_lvgl.default_font_data_size = font_data_size;
+    s_lvgl.default_emoji_font_data = emoji_data;
+    s_lvgl.default_emoji_font_data_size = emoji_data_size;
     s_lvgl.default_font_size = font_size;
     s_lvgl.default_font_cache_size = cache_size;
-    ESP_LOGI(TAG, "default font loaded: %s size=%lu cache=%lu", s_lvgl.default_font_path, (unsigned long)font_size, (unsigned long)cache_size);
+    ESP_LOGI(TAG, "default font loaded: %s size=%lu cache=%lu emoji=%s",
+             s_lvgl.default_font_path, (unsigned long)font_size, (unsigned long)cache_size,
+             s_lvgl.default_emoji_font ? "yes" : "no");
     return ESP_OK;
 }
 

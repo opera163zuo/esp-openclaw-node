@@ -8,8 +8,8 @@ idf_component_register(
         "include"
         "src"
     REQUIRES
+        claw_utils
         claw_cap
-        claw_core
         console
         esp_timer
         freertos

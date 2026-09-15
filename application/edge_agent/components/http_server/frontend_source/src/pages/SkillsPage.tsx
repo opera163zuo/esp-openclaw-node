@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, Show, type Component } from 'solid-js';
 import { t, tf } from '../i18n';
 import type { AppConfig, LuaModuleItem } from '../api/client';
-import { appCapabilities, appConfig, appLuaModules } from '../state/config';
+import { appConfig, appLuaModules } from '../state/config';
 import { createConfigTab } from '../state/configTab';
 import { TabShell } from '../components/layout/TabShell';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -38,20 +38,15 @@ function serializeModules(selected: string[], items: LuaModuleItem[]): string {
 
 function isCapLuaEnabled(): boolean {
   const raw = (appConfig().enabled_cap_groups || '').trim();
-  if (!raw) {
-    return appCapabilities().some((item) => item.group_id === 'cap_lua');
-  }
+  if (!raw) return true;
   if (raw === SENTINEL_NONE || raw === 'none') return false;
-  return raw
-    .split(',')
-    .map((token) => token.trim())
-    .includes('cap_lua');
+  return raw.split(',').map((token) => token.trim()).includes('cap_lua');
 }
 
 export const SkillsPage: Component<{ onRestartRequest: () => void }> = (props) => {
   const tab = createConfigTab<SkillForm>({
     tab: 'skills',
-    groups: ['skills', 'capabilities'],
+    groups: ['lua', 'capabilities'],
     toForm: (config: Partial<AppConfig>) => ({
       enabled: parseModules(config.enabled_lua_modules ?? '', appLuaModules(), true),
     }),

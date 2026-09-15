@@ -10,72 +10,24 @@ export type AppConfig = {
   ap_ssid: string;
   ap_password: string;
   ap_behavior: string;
-  llm_api_key: string;
-  llm_backend_type: string;
-  llm_model: string;
-  llm_base_url: string;
-  llm_auth_type: string;
-  llm_timeout_ms: string;
-  llm_max_tokens: string;
-  llm_default_image_max_bytes: string;
-  llm_max_tokens_field: string;
-  llm_supports_tools: string;
-  llm_supports_vision: string;
-  llm_image_remote_url_only: string;
-  qq_app_id: string;
-  qq_app_secret: string;
-  qq_msg_type: string;
-  feishu_app_id: string;
-  feishu_app_secret: string;
-  tg_bot_token: string;
-  wechat_token: string;
-  wechat_base_url: string;
-  wechat_cdn_base_url: string;
-  wechat_account_id: string;
-  search_brave_key: string;
-  search_tavily_key: string;
-  search_http_allowlist: string;
+  openclaw_gateway_url: string;
+  openclaw_gateway_token: string;
+  openclaw_device_family: string;
   enabled_cap_groups: string;
-  llm_visible_cap_groups: string;
   enabled_lua_modules: string;
   time_timezone: string;
 };
 
 /** Server-side configuration groups (must stay in sync with
- * CONFIG_FIELDS in http_server_config_api.c). */
-export type ConfigGroup = 'wifi' | 'llm' | 'im' | 'search' | 'capabilities' | 'skills' | 'time';
+ * CONFIG_FIELDS in http_server_config_api.c). The Native Node exposes only
+ * Wi-Fi, OpenClaw, local capability, Lua, and time settings. */
+export type ConfigGroup = 'wifi' | 'openclaw' | 'capabilities' | 'lua' | 'time';
 
 export const GROUP_FIELDS: Record<ConfigGroup, (keyof AppConfig)[]> = {
   wifi: ['wifi_ssid', 'wifi_password', 'ap_ssid', 'ap_password', 'ap_behavior'],
-  llm: [
-    'llm_api_key',
-    'llm_backend_type',
-    'llm_model',
-    'llm_base_url',
-    'llm_auth_type',
-    'llm_timeout_ms',
-    'llm_max_tokens',
-    'llm_default_image_max_bytes',
-    'llm_max_tokens_field',
-    'llm_supports_tools',
-    'llm_supports_vision',
-    'llm_image_remote_url_only',
-  ],
-  im: [
-    'qq_app_id',
-    'qq_app_secret',
-    'qq_msg_type',
-    'feishu_app_id',
-    'feishu_app_secret',
-    'tg_bot_token',
-    'wechat_token',
-    'wechat_base_url',
-    'wechat_cdn_base_url',
-    'wechat_account_id',
-  ],
-  search: ['search_brave_key', 'search_tavily_key', 'search_http_allowlist'],
-  capabilities: ['enabled_cap_groups', 'llm_visible_cap_groups'],
-  skills: ['enabled_lua_modules'],
+  openclaw: ['openclaw_gateway_url', 'openclaw_gateway_token', 'openclaw_device_family'],
+  capabilities: ['enabled_cap_groups'],
+  lua: ['enabled_lua_modules'],
   time: ['time_timezone'],
 };
 
@@ -93,12 +45,6 @@ export type StatusInfo = {
   storage_base_path: string;
 };
 
-export type CapabilityItem = {
-  group_id: string;
-  display_name: string;
-  default_llm_visible: boolean;
-};
-
 export type LuaModuleItem = {
   module_id: string;
   display_name: string;
@@ -109,23 +55,6 @@ export type FileEntry = {
   path: string;
   is_dir: boolean;
   size: number;
-};
-
-export type WechatLoginStatus = {
-  ok?: boolean;
-  active?: boolean;
-  completed?: boolean;
-  configured?: boolean;
-  session_key?: string;
-  status?: string;
-  message?: string;
-  qr_data_url?: string;
-  /** Returned only when `completed=true` – the actual WeChat token. The
-   * frontend must display this for user review and save it explicitly. */
-  token?: string;
-  account_id?: string;
-  user_id?: string;
-  base_url?: string;
 };
 
 async function parseError(response: Response, fallback: string): Promise<Error> {
@@ -208,15 +137,6 @@ export async function saveConfigPatch(patch: Partial<AppConfig>) {
     },
     'Failed to save config',
   );
-}
-
-export async function fetchCapabilities() {
-  const data = await request<{ items: CapabilityItem[] }>(
-    '/api/capabilities',
-    undefined,
-    'Failed to load capabilities',
-  );
-  return Array.isArray(data.items) ? data.items : [];
 }
 
 export async function fetchLuaModules() {
@@ -373,34 +293,6 @@ export async function downloadFolderTar(
   return new Blob(parts, { type: 'application/x-tar' });
 }
 
-export async function startWechatLogin(accountId: string, force = true) {
-  return request<WechatLoginStatus>(
-    '/api/wechat/login/start',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_id: accountId, force }),
-    },
-    'Failed to start WeChat login',
-  );
-}
-
-export async function pollWechatLoginStatus() {
-  return request<WechatLoginStatus>(
-    '/api/wechat/login/status',
-    undefined,
-    'Failed to read WeChat login status',
-  );
-}
-
-export async function cancelWechatLogin() {
-  return request<WechatLoginStatus>(
-    '/api/wechat/login/cancel',
-    { method: 'POST' },
-    'Failed to cancel WeChat login',
-  );
-}
-
 export async function restartDevice() {
   return request<{ ok?: boolean; message?: string }>(
     '/api/restart',
@@ -409,45 +301,4 @@ export async function restartDevice() {
   );
 }
 
-export type WebImLink = { url: string; label: string };
-export type WebImMessage = {
-  seq: number;
-  role: string;
-  text: string;
-  ts_ms?: number;
-  links?: WebImLink[];
-};
-
-export type WebImStatusResponse = {
-  ok?: boolean;
-  bound?: boolean;
-};
-
-export async function fetchWebimStatus() {
-  return request<WebImStatusResponse>(
-    '/api/webim/status',
-    undefined,
-    'Failed to read Web IM status',
-  );
-}
-
 /** Browser WebSocket URL for live assistant events (`CONFIG_HTTPD_WS_SUPPORT` must be enabled). */
-export function webimWebSocketUrl(): string {
-  if (typeof window === 'undefined') {
-    return 'ws://127.0.0.1/ws/webim';
-  }
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}/ws/webim`;
-}
-
-export async function sendWebimMessage(chatId: string, text: string, files: string[] = []) {
-  return request<{ ok?: boolean }>(
-    '/api/webim/send',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, files }),
-    },
-    'Failed to send Web IM message',
-  );
-}

@@ -36,8 +36,9 @@ Today the code falls into four areas:
   - settings/ Base library for local settings persistence
   - captive_dns/ Captive DNS for SoftAP provisioning
   - display_service/ Display hardware, LVGL, and display session management [\[details\]](@lang/reference-cap/lua-modules#display-module)
-  - emote/ Emote display and network-state linkage
-  - esp_painter/ Lightweight drawing helpers
+  - display_ttf/ Shared TrueType text backend — font assets, emoji fallback chain, UTF-8 metrics, and glyph coverage bitmaps
+  - system_ui/ LVGL system UI — home screen, notice layer, fullscreen page, launcher
+  - mcp_mdns/ MCP over mDNS discovery
   - esp_video/ Video-processing wrappers
   - http_reuse/ Reusable HTTP foundation component
   - lua_module_builder/ Lua module build helpers

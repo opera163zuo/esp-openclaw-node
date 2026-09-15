@@ -772,8 +772,7 @@ static const claw_cap_descriptor_t s_files_descriptors[] = {
         .family = "files",
         .description = "Read a text file.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Absolute path under an allowed directory\"}},\"required\":[\"path\"]}",
+                .input_schema_json = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Absolute path under an allowed directory\"}},\"required\":[\"path\"]}",
         .execute = cap_files_read_file_execute,
     },
     {
@@ -782,8 +781,7 @@ static const claw_cap_descriptor_t s_files_descriptors[] = {
         .family = "files",
         .description = "Create or overwrite a text file",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Absolute path under a writable directory\"},\"content\":{\"type\":\"string\"}},\"required\":[\"path\",\"content\"]}",
+                .input_schema_json = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Absolute path under a writable directory\"},\"content\":{\"type\":\"string\"}},\"required\":[\"path\",\"content\"]}",
         .execute = cap_files_write_file_execute,
     },
     {
@@ -792,8 +790,7 @@ static const claw_cap_descriptor_t s_files_descriptors[] = {
         .family = "files",
         .description = "Delete a file.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Absolute path under a writable directory\"}},\"required\":[\"path\"]}",
+                .input_schema_json = "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Absolute path under a writable directory\"}},\"required\":[\"path\"]}",
         .execute = cap_files_delete_file_execute,
     },
     {
@@ -802,8 +799,7 @@ static const claw_cap_descriptor_t s_files_descriptors[] = {
         .family = "files",
         .description = "Copy a file.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = "{\"type\":\"object\",\"properties\":{\"src_path\":{\"type\":\"string\",\"description\":\"Absolute source path\"},\"dst_path\":{\"type\":\"string\",\"description\":\"Absolute destination path under a writable directory\"}},\"required\":[\"src_path\",\"dst_path\"]}",
+                .input_schema_json = "{\"type\":\"object\",\"properties\":{\"src_path\":{\"type\":\"string\",\"description\":\"Absolute source path\"},\"dst_path\":{\"type\":\"string\",\"description\":\"Absolute destination path under a writable directory\"}},\"required\":[\"src_path\",\"dst_path\"]}",
         .execute = cap_files_copy_file_execute,
     },
     {
@@ -812,8 +808,7 @@ static const claw_cap_descriptor_t s_files_descriptors[] = {
         .family = "files",
         .description = "Move a file.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = "{\"type\":\"object\",\"properties\":{\"src_path\":{\"type\":\"string\",\"description\":\"Absolute source path under a writable directory\"},\"dst_path\":{\"type\":\"string\",\"description\":\"Absolute destination path under a writable directory\"}},\"required\":[\"src_path\",\"dst_path\"]}",
+                .input_schema_json = "{\"type\":\"object\",\"properties\":{\"src_path\":{\"type\":\"string\",\"description\":\"Absolute source path under a writable directory\"},\"dst_path\":{\"type\":\"string\",\"description\":\"Absolute destination path under a writable directory\"}},\"required\":[\"src_path\",\"dst_path\"]}",
         .execute = cap_files_move_file_execute,
     },
     {
@@ -822,8 +817,7 @@ static const claw_cap_descriptor_t s_files_descriptors[] = {
         .family = "files",
         .description = "Recursively list files, optionally filtered by case-insensitive path keyword.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json = "{\"type\":\"object\",\"properties\":{\"keyword\":{\"type\":\"string\"}}}",
+                .input_schema_json = "{\"type\":\"object\",\"properties\":{\"keyword\":{\"type\":\"string\"}}}",
         .execute = cap_files_list_dir_execute,
     },
 };

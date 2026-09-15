@@ -1,13 +1,11 @@
 import { createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import {
-  fetchCapabilities,
   fetchConfigGroups,
   fetchLuaModules,
   fetchStatus,
   saveConfigPatch,
   type AppConfig,
-  type CapabilityItem,
   type ConfigGroup,
   type LuaModuleItem,
   type StatusInfo,
@@ -24,18 +22,10 @@ export async function reloadStatus() {
   return next;
 }
 
-/* ── Capabilities & Lua modules ─────────────────────────────────────── */
+/* ── Lua modules ────────────────────────────────────────────────────── */
 
-const [capabilities, setCapabilities] = createSignal<CapabilityItem[]>([]);
 const [luaModules, setLuaModules] = createSignal<LuaModuleItem[]>([]);
-export const appCapabilities = capabilities;
 export const appLuaModules = luaModules;
-
-export async function reloadCapabilities() {
-  const items = await fetchCapabilities();
-  setCapabilities(items);
-  return items;
-}
 
 export async function reloadLuaModules() {
   const items = await fetchLuaModules();

@@ -4,24 +4,12 @@ import { t } from '../i18n';
 export type TabId =
   | 'status'
   | 'basic'
-  | 'llm'
-  | 'im'
-  | 'webreq'
-  | 'memory'
-  | 'webim'
-  | 'capabilities'
   | 'skills'
   | 'files';
 
 const [dirtyTabs, setDirtyTabs] = createSignal<Record<TabId, boolean>>({
   status: false,
   basic: false,
-  llm: false,
-  im: false,
-  webreq: false,
-  memory: false,
-  webim: false,
-  capabilities: false,
   skills: false,
   files: false,
 });

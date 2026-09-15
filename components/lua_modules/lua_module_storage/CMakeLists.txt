@@ -4,6 +4,7 @@ idf_component_register(
     INCLUDE_DIRS
         "src"
     REQUIRES
+        claw_paths
         cap_lua
         fatfs
 )

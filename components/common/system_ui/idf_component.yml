@@ -2,11 +2,11 @@
 dependencies:
   claw_cap:
     path: ../../claw_modules/claw_cap
-  claw_core:
-    path: ../../claw_modules/claw_core
-  claw_skill:
-    path: ../../claw_modules/claw_skill
+  claw_paths:
+    path: ../../claw_modules/claw_paths
   display_service:
     path: ../display_service
+  display_ttf:
+    path: ../display_ttf
   espressif/esp_new_jpeg: "*"
   lvgl/lvgl: ^9.5.0

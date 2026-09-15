@@ -266,6 +266,29 @@ static esp_err_t screen_clear(char *out, size_t size)
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
+/* Formats the coverage fragment for a text command response.
+ *
+ * Text is queued asynchronously, so "shown": true only means the request was
+ * accepted - it cannot distinguish a real render from a row of missing-glyph
+ * boxes. Reporting how many characters have no glyph closes that gap. The field
+ * is null rather than 0 when the font is not loaded yet, so an absent answer is
+ * never mistaken for a clean one. */
+static void write_coverage_field(const char *text, char *out, size_t size)
+{
+    size_t missing = 0;
+    uint32_t first = 0;
+    if (system_ui_text_coverage(text, &missing, &first) != ESP_OK) {
+        snprintf(out, size, "\"missing_glyphs\":null");
+        return;
+    }
+    if (missing == 0) {
+        snprintf(out, size, "\"missing_glyphs\":0");
+        return;
+    }
+    snprintf(out, size, "\"missing_glyphs\":%u,\"first_missing\":\"U+%04X\"",
+             (unsigned)missing, (unsigned)first);
+}
+
 static esp_err_t screen_text(const char *params_json, char *out, size_t size)
 {
     cJSON *params = cJSON_Parse(params_json ? params_json : "{}");
@@ -276,10 +299,13 @@ static esp_err_t screen_text(const char *params_json, char *out, size_t size)
         cJSON_Delete(params);
         return ESP_ERR_INVALID_ARG;
     }
+    /* text points into the parsed tree, so this has to run before the delete. */
+    char coverage[64];
+    write_coverage_field(text, coverage, sizeof(coverage));
     err = system_ui_show_text(text);
     cJSON_Delete(params);
     if (err != ESP_OK) return err;
-    int n = snprintf(out, size, "{\"command\":\"device.screen.text\",\"shown\":true}");
+    int n = snprintf(out, size, "{\"command\":\"device.screen.text\",\"shown\":true,%s}", coverage);
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
@@ -287,6 +313,9 @@ static esp_err_t screen_fullscreen(const char *command, const char *params_json,
 {
     esp_err_t err;
     cJSON *params = NULL;
+    /* Overwritten with the real answer in the text branch. The enter/clear/exit
+       commands carry no text, so null is the honest value there. */
+    char coverage[64] = "\"missing_glyphs\":null";
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_ENTER) == 0) {
         err = system_ui_fullscreen_enter();
     } else if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_SCREEN_FULLSCREEN_CLEAR) == 0) {
@@ -304,15 +333,16 @@ static esp_err_t screen_fullscreen(const char *command, const char *params_json,
             cJSON_Delete(params);
             return ESP_ERR_INVALID_ARG;
         }
-        if (orientation && strcmp(orientation, "landscape") == 0) {
-            cJSON_Delete(params);
-            return ESP_ERR_NOT_SUPPORTED;
-        }
+        /* text points into the parsed tree, so this has to run before the delete. */
+        write_coverage_field(text, coverage, sizeof(coverage));
+        /* "landscape" is honoured: the UI rotates the fullscreen label as an
+           object-level transform, so no display-level rotation is involved and
+           the SPI flush geometry stays untouched. */
         err = system_ui_fullscreen_text(text, orientation ? orientation : "portrait");
     }
     cJSON_Delete(params);
     if (err != ESP_OK) return err;
-    int n = snprintf(out, size, "{\"command\":\"%s\",\"accepted\":true}", command);
+    int n = snprintf(out, size, "{\"command\":\"%s\",\"accepted\":true,%s}", command, coverage);
     return n < 0 || (size_t)n >= size ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 

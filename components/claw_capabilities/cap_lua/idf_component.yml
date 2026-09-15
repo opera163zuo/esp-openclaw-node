@@ -2,7 +2,7 @@
 dependencies:
   claw_cap:
     path: ../../claw_modules/claw_cap
-  claw_core:
-    path: ../../claw_modules/claw_core
+  claw_utils:
+    path: ../../claw_modules/claw_utils
   lua:
     version: "^5.4"

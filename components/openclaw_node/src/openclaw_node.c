@@ -25,6 +25,13 @@
 #define PROTOCOL_VERSION 4
 #define RX_BUFFER_SIZE 24576
 #define MAX_FRAME_SIZE (64 * 1024)
+#define NODE_STRING_MAX 320
+#define NODE_ID_MAX 96
+#define NODE_PUBLIC_KEY_MAX 96
+#define NODE_CLIENT_ID_MAX 64
+#define NODE_VERSION_MAX 32
+#define NODE_PLATFORM_MAX 32
+#define NODE_DEVICE_FAMILY_MAX 64
 
 static int utf8_invalid_offset(const char *data, size_t len)
 {
@@ -49,6 +56,14 @@ static int utf8_invalid_offset(const char *data, size_t len)
 
 typedef struct {
     openclaw_node_config_t cfg;
+    char gateway_url[NODE_STRING_MAX];
+    char gateway_token[NODE_STRING_MAX];
+    char device_id[NODE_ID_MAX];
+    char public_key_b64url[NODE_PUBLIC_KEY_MAX];
+    char client_id[NODE_CLIENT_ID_MAX];
+    char client_version[NODE_VERSION_MAX];
+    char platform[NODE_PLATFORM_MAX];
+    char device_family[NODE_DEVICE_FAMILY_MAX];
     esp_websocket_client_handle_t ws;
     char rx_buffer[RX_BUFFER_SIZE];
     size_t rx_length;
@@ -261,10 +276,41 @@ static void websocket_handler(void *arg, esp_event_base_t base, int32_t event_id
 
 esp_err_t openclaw_node_start(const openclaw_node_config_t *config)
 {
-    if (!config || !config->gateway_url || !config->device_id || !config->public_key_b64url || !config->client_id || !config->commands || !config->command_count || !config->sign_cb || !config->command_cb || s_node.ws) return ESP_ERR_INVALID_ARG;
-    memset(&s_node, 0, sizeof(s_node)); s_node.cfg = *config;
+    if (!config || !config->gateway_url || !config->device_id || !config->public_key_b64url ||
+        !config->client_id || !config->commands || !config->command_count || !config->sign_cb ||
+        !config->command_cb || s_node.ws) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(&s_node, 0, sizeof(s_node));
+    if (strlcpy(s_node.gateway_url, config->gateway_url, sizeof(s_node.gateway_url)) >= sizeof(s_node.gateway_url) ||
+        strlcpy(s_node.device_id, config->device_id, sizeof(s_node.device_id)) >= sizeof(s_node.device_id) ||
+        strlcpy(s_node.public_key_b64url, config->public_key_b64url, sizeof(s_node.public_key_b64url)) >= sizeof(s_node.public_key_b64url) ||
+        strlcpy(s_node.client_id, config->client_id, sizeof(s_node.client_id)) >= sizeof(s_node.client_id) ||
+        strlcpy(s_node.client_version, config->client_version ? config->client_version : "0.1.0", sizeof(s_node.client_version)) >= sizeof(s_node.client_version) ||
+        strlcpy(s_node.platform, config->platform ? config->platform : "esp32", sizeof(s_node.platform)) >= sizeof(s_node.platform) ||
+        strlcpy(s_node.device_family, config->device_family ? config->device_family : "esp-openclaw", sizeof(s_node.device_family)) >= sizeof(s_node.device_family)) {
+        memset(&s_node, 0, sizeof(s_node));
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (config->gateway_token &&
+        strlcpy(s_node.gateway_token, config->gateway_token, sizeof(s_node.gateway_token)) >= sizeof(s_node.gateway_token)) {
+        memset(&s_node, 0, sizeof(s_node));
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    s_node.cfg = *config;
+    s_node.cfg.gateway_url = s_node.gateway_url;
+    s_node.cfg.gateway_token = config->gateway_token ? s_node.gateway_token : NULL;
+    s_node.cfg.device_id = s_node.device_id;
+    s_node.cfg.public_key_b64url = s_node.public_key_b64url;
+    s_node.cfg.client_id = s_node.client_id;
+    s_node.cfg.client_version = s_node.client_version;
+    s_node.cfg.platform = s_node.platform;
+    s_node.cfg.device_family = s_node.device_family;
+
     esp_websocket_client_config_t ws_cfg = {
-        .uri = config->gateway_url,
+        .uri = s_node.gateway_url,
         .network_timeout_ms = 10000,
         .reconnect_timeout_ms = 5000,
         .buffer_size = RX_BUFFER_SIZE,

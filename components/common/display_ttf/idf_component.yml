@@ -1,0 +1,5 @@
+## IDF Component Manager Manifest File
+dependencies:
+  claw_paths:
+    path: ../../claw_modules/claw_paths
+  lvgl/lvgl: ^9.5.0

@@ -15,7 +15,6 @@
 
 #include "cJSON.h"
 #include "claw_cap.h"
-#include "claw_core.h"
 #include "esp_check.h"
 #include "esp_log.h"
 
@@ -685,8 +684,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         .family = "automation",
         .description = "Run a Lua script synchronously with optional args and timeout.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},"
         "\"args\":{\"type\":\"object\","
         "\"description\":\"Lua script arguments object keyed by parameter name.\","
@@ -704,8 +702,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         "final, or failed-job logs with lua_get_async_job or lua_tail_async_job "
         "using returned job id.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},"
         "\"args\":{\"type\":\"object\","
         "\"description\":\"Lua script arguments object keyed by parameter name.\","
@@ -721,8 +718,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         .family = "automation",
         .description = "List Lua async jobs by optional status filter.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"enum\":[\"all\",\"queued\",\"running\",\"done\",\"failed\",\"timeout\",\"stopped\"]}}}",
         .execute = cap_lua_list_async_jobs_execute,
     },
@@ -732,8 +728,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         .family = "automation",
         .description = "Get status, summary, and recent logs for a Lua async job by job_id or name.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"job_id\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}}}",
         .execute = cap_lua_get_async_job_execute,
     },
@@ -745,8 +740,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         "Read incremental logs for a Lua async job by job_id or name. Pass since_seq from the "
         "previous log_next_seq to continue reading only new log text.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"job_id\":{\"type\":\"string\"},"
         "\"name\":{\"type\":\"string\"},\"since_seq\":{\"type\":\"integer\",\"minimum\":0},"
         "\"max_bytes\":{\"type\":\"integer\",\"minimum\":1}}}",
@@ -761,8 +755,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         "to stop, cancel, quit or close an async script; replying without calling this leaves "
         "the job running. Cooperative; default wait 2000 ms.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"job_id\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"wait_ms\":{\"type\":\"integer\",\"minimum\":1}}}",
         .execute = cap_lua_stop_async_job_execute,
     },
@@ -775,8 +768,7 @@ static const claw_cap_descriptor_t s_lua_descriptors[] = {
         "(e.g. exclusive='display'). MUST be called when the user asks to clear the screen, "
         "stop everything or cancel all background scripts.",
         .kind = CLAW_CAP_KIND_CALLABLE,
-        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
-        .input_schema_json =
+                .input_schema_json =
         "{\"type\":\"object\",\"properties\":{\"exclusive\":{\"type\":\"string\"},\"wait_ms\":{\"type\":\"integer\",\"minimum\":1}}}",
         .execute = cap_lua_stop_all_async_jobs_execute,
     },

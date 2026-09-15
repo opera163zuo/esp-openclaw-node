@@ -68,20 +68,18 @@ add_custom_target(edge_agent_prepare_system_fs_image ALL
 fatfs_create_rawflash_image(system "${EDGE_AGENT_FATFS_SYSTEM_BUILD_ROOT}" FLASH_IN_PROJECT)
 fatfs_create_spiflash_image(storage "${EDGE_AGENT_FATFS_BUILD_ROOT}" FLASH_IN_PROJECT)
 
-# Skill / Lua resources are now baked into the read-only system partition
-# so storage can be reformatted at runtime without losing them.
-skill_builder_configure_skill_sync(
-    TARGET fatfs_system_bin
-    SKILL_OUTPUT_DIR "${EDGE_AGENT_FATFS_SYSTEM_BUILD_ROOT}/skills"
-)
-
+# Lua resources are baked into the read-only system partition so storage can be
+# reformatted at runtime without losing them.
+#
+# The skill sync that used to run here was removed together with the Agent:
+# skills are an Agent concept and this build has no Agent. Lua module docs and
+# tests stay, because they document the live-scripting surface.
 lua_module_builder_configure_builtin_lua_sync(
     TARGET fatfs_system_bin
     BUILTIN_OUTPUT_DIR "${EDGE_AGENT_FATFS_SYSTEM_BUILD_ROOT}/scripts/builtin"
     DOCS_OUTPUT_DIR "${EDGE_AGENT_FATFS_SYSTEM_BUILD_ROOT}/scripts/docs"
 )
 
-add_dependencies(skill_builder_sync_skills edge_agent_prepare_system_fs_image)
 add_dependencies(lua_module_builder_sync_builtin_scripts edge_agent_prepare_system_fs_image)
 add_dependencies(lua_module_builder_sync_docs edge_agent_prepare_system_fs_image)
 add_dependencies(fatfs_system_bin edge_agent_prepare_system_fs_image)

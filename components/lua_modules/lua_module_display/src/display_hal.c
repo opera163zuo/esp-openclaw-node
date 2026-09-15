@@ -11,12 +11,12 @@
 #include <string.h>
 #include "display_service.h"
 #include "display_dirty.h"
+#include "display_ttf.h"
 #include "esp_attr.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_log.h"
-#include "esp_painter_font.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -333,6 +333,12 @@ esp_err_t display_hal_create(display_service_session_handle_t session,
     }
     ESP_GOTO_ON_FALSE(lcd_width > 0 && lcd_height > 0, ESP_ERR_INVALID_ARG,
                       fail, TAG, "invalid lcd size");
+
+    /* Bring up the shared TrueType text backend. Failure is not fatal: text
+       APIs then report ESP_ERR_NOT_SUPPORTED instead of drawing nothing. */
+    if (display_ttf_configure(NULL, NULL) != ESP_OK) {
+        ESP_LOGW(TAG, "text backend unavailable, text drawing will be rejected");
+    }
 
     /* pixel_format is part of the identity for the no-op reinit check: switching
        formats must reallocate framebuffers and the swap buffer at the new bpp. */
@@ -734,73 +740,20 @@ static esp_err_t display_hal_submit_bitmap_locked(int x_start, int y_start,
     return ESP_OK;
 }
 
-static const esp_painter_basic_font_t *display_hal_get_font(uint8_t font_size)
+/* Text now goes through the shared TrueType backend, so the Lua display API
+   renders the same glyph set as the LVGL system UI: the bundled Noto Sans SC
+   subset plus its monochrome emoji fallback. Size 0 selects the backend
+   default; the returned handle is owned by display_ttf. */
+static const lv_font_t *display_hal_get_font(uint8_t font_size)
 {
-    switch (font_size) {
-#if CONFIG_ESP_PAINTER_BASIC_FONT_12
-    case 12:
-        return &esp_painter_basic_font_12;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_16
-    case 16:
-        return &esp_painter_basic_font_16;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_20
-    case 20:
-        return &esp_painter_basic_font_20;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_24
-    case 0:
-    case 24:
-        return &esp_painter_basic_font_24;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_28
-    case 28:
-        return &esp_painter_basic_font_28;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_32
-    case 32:
-        return &esp_painter_basic_font_32;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_36
-    case 36:
-        return &esp_painter_basic_font_36;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_40
-    case 40:
-        return &esp_painter_basic_font_40;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_44
-    case 44:
-        return &esp_painter_basic_font_44;
-#endif
-#if CONFIG_ESP_PAINTER_BASIC_FONT_48
-    case 48:
-        return &esp_painter_basic_font_48;
-#endif
-    default:
-        break;
-    }
-
-#if CONFIG_ESP_PAINTER_BASIC_FONT_24
-    return &esp_painter_basic_font_24;
-#elif CONFIG_ESP_PAINTER_BASIC_FONT_20
-    return &esp_painter_basic_font_20;
-#elif CONFIG_ESP_PAINTER_BASIC_FONT_16
-    return &esp_painter_basic_font_16;
-#elif CONFIG_ESP_PAINTER_BASIC_FONT_12
-    return &esp_painter_basic_font_12;
-#else
-    return NULL;
-#endif
+    return display_ttf_font(font_size);
 }
 
-static void display_hal_measure_text_raw(const char *text, const esp_painter_basic_font_t *font,
+static void display_hal_measure_text_raw(const char *text, const lv_font_t *font,
                                          uint16_t *out_width, uint16_t *out_height)
 {
-    uint16_t max_cols = 0;
-    uint16_t cols = 0;
-    uint16_t lines = 1;
+    int32_t width = 0;
+    int32_t height = 0;
 
     if (!text || !font) {
         if (out_width) {
@@ -812,26 +765,16 @@ static void display_hal_measure_text_raw(const char *text, const esp_painter_bas
         return;
     }
 
-    for (const char *p = text; *p; ++p) {
-        if (*p == '\n') {
-            if (cols > max_cols) {
-                max_cols = cols;
-            }
-            cols = 0;
-            lines++;
-        } else if (*p != '\r') {
-            cols++;
-        }
-    }
-    if (cols > max_cols) {
-        max_cols = cols;
+    if (display_ttf_measure_font(font, text, &width, &height) != ESP_OK) {
+        width = 0;
+        height = 0;
     }
 
     if (out_width) {
-        *out_width = (uint16_t)(max_cols * font->width);
+        *out_width = (uint16_t)(width < 0 ? 0 : (width > UINT16_MAX ? UINT16_MAX : width));
     }
     if (out_height) {
-        *out_height = (uint16_t)(lines * font->height);
+        *out_height = (uint16_t)(height < 0 ? 0 : (height > UINT16_MAX ? UINT16_MAX : height));
     }
 }
 
@@ -2302,23 +2245,25 @@ esp_err_t display_hal_fill_triangle(int x1, int y1, int x2, int y2,
 esp_err_t display_hal_measure_text(const char *text, uint8_t font_size,
                                    uint16_t *out_width, uint16_t *out_height)
 {
-    const esp_painter_basic_font_t *font = display_hal_get_font(font_size);
+    const lv_font_t *font = display_hal_get_font(font_size);
 
-    ESP_RETURN_ON_FALSE(font != NULL, ESP_ERR_NOT_SUPPORTED, TAG, "font size %u unavailable", font_size);
+    ESP_RETURN_ON_FALSE(font != NULL, ESP_ERR_NOT_SUPPORTED, TAG,
+                        "text backend unavailable for size %u", font_size);
     display_hal_measure_text_raw(text, font, out_width, out_height);
     return ESP_OK;
 }
 
-/* Draw a glyph into the framebuffer as horizontal runs (spans), using
-   fill_row for each run. Clip is applied on entry. */
-static void display_hal_draw_glyph_direct_locked(uint8_t *framebuffer,
-                                                 int glyph_x, int glyph_y,
-                                                 const uint8_t *bitmap,
-                                                 int glyph_w, int glyph_h,
-                                                 int bytes_per_row,
-                                                 display_color_t text_color, bool blend,
-                                                 int clip_left, int clip_top,
-                                                 int clip_right, int clip_bottom)
+/* Blend one anti-aliased glyph bitmap into the framebuffer.
+   The glyph comes from display_ttf as an 8-bit coverage plane; coverage scales
+   the requested text alpha so edges fade instead of hard-cutting. Clip bounds
+   are half-open and applied on entry. */
+static void display_hal_blit_glyph_locked(uint8_t *framebuffer,
+                                          int glyph_x, int glyph_y,
+                                          const uint8_t *coverage,
+                                          int glyph_w, int glyph_h, int stride,
+                                          display_color_t text_color,
+                                          int clip_left, int clip_top,
+                                          int clip_right, int clip_bottom)
 {
     int dy_start = 0;
     int dy_end = glyph_h;
@@ -2342,39 +2287,89 @@ static void display_hal_draw_glyph_direct_locked(uint8_t *framebuffer,
     }
 
     const size_t bpp = s_state.bytes_per_pixel;
+    const bool rgb565 = s_state.pixel_format == DISPLAY_HAL_PIXEL_FORMAT_RGB565;
+    const uint32_t text_alpha = text_color.a;
+    const uint16_t opaque_565 = rgb565 ? display_color_to_rgb565(text_color) : 0;
+    display_color_t pixel_color = text_color;
 
     for (int dy = dy_start; dy < dy_end; ++dy) {
-        const uint8_t *brow = bitmap + (size_t)dy * bytes_per_row;
-        uint8_t *fb_row = display_hal_pixel_ptr(framebuffer, glyph_x, glyph_y + dy);
-        int run_start = -1;
+        const uint8_t *coverage_row = coverage + (size_t)dy * (size_t)stride;
+        uint8_t *row = display_hal_pixel_ptr(framebuffer, glyph_x, glyph_y + dy);
 
         for (int dx = dx_start; dx < dx_end; ++dx) {
-            bool on = (brow[dx >> 3] & (uint8_t)(0x80U >> (dx & 7))) != 0;
-            if (on) {
-                if (run_start < 0) {
-                    run_start = dx;
-                }
-            } else if (run_start >= 0) {
-                display_hal_fill_row(fb_row + (size_t)run_start * bpp,
-                                     text_color, dx - run_start, blend);
-                run_start = -1;
+            uint32_t alpha = coverage_row[dx];
+            if (alpha == 0) {
+                continue;
             }
-        }
-        if (run_start >= 0) {
-            display_hal_fill_row(fb_row + (size_t)run_start * bpp,
-                                 text_color, dx_end - run_start, blend);
+            if (text_alpha != 255) {
+                alpha = (alpha * text_alpha + 127) / 255;
+                if (alpha == 0) {
+                    continue;
+                }
+            }
+            uint8_t *pixel = row + (size_t)dx * bpp;
+            if (rgb565) {
+                uint16_t *value = (uint16_t *)pixel;
+                if (alpha >= 255) {
+                    *value = opaque_565;
+                } else {
+                    pixel_color.a = (uint8_t)alpha;
+                    *value = display_color_blend_rgb565(*value, pixel_color);
+                }
+            } else {
+                if (alpha >= 255) {
+                    display_hal_rgb888_write(pixel, text_color.r, text_color.g, text_color.b);
+                } else {
+                    pixel_color.a = (uint8_t)alpha;
+                    display_hal_pixel_blend(pixel, pixel_color);
+                }
+            }
         }
     }
 }
 
+/* LVGL draws a hollow box for code points that no font in the chain covers.
+   Mirroring that keeps a missing character visible instead of silently
+   swallowing it. Works on both the direct and the submit path. */
+static esp_err_t display_hal_draw_missing_glyph_locked(int glyph_x, int glyph_y,
+                                                       int glyph_w, int glyph_h,
+                                                       display_color_t text_color)
+{
+    esp_err_t ret;
+
+    if (glyph_w <= 0 || glyph_h <= 0) {
+        return ESP_OK;
+    }
+    ret = display_hal_fill_rect_locked(glyph_x, glyph_y, glyph_w, 1, text_color);
+    if (ret != ESP_OK || glyph_h == 1) {
+        return ret;
+    }
+    ret = display_hal_fill_rect_locked(glyph_x, glyph_y + glyph_h - 1, glyph_w, 1, text_color);
+    if (ret != ESP_OK || glyph_w == 1) {
+        return ret;
+    }
+    if (glyph_h > 2) {
+        ret = display_hal_fill_rect_locked(glyph_x, glyph_y + 1, 1, glyph_h - 2, text_color);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        ret = display_hal_fill_rect_locked(glyph_x + glyph_w - 1, glyph_y + 1, 1, glyph_h - 2, text_color);
+    }
+    return ret;
+}
+
 static esp_err_t display_hal_draw_text_bitmap_locked(int x, int y, const char *text,
-                                                     const esp_painter_basic_font_t *font,
+                                                     const lv_font_t *font,
                                                      int text_w, int text_h,
                                                      display_color_t text_color)
 {
     int cursor_x = x;
-    int cursor_y = y;
-    int bytes_per_row = (font->width + 7) / 8;
+    int line_top = y;
+    /* Distance from the top of a line box down to the baseline. This is the
+       same term LVGL's label renderer uses, so raw text and LVGL widgets land
+       on the same baseline for a given font size. */
+    const int baseline_offset = font->line_height - font->base_line;
+    const int space_advance = (int)lv_font_get_glyph_width(font, ' ', 0);
 
     if (display_color_is_transparent(text_color)) {
         return ESP_OK;
@@ -2382,7 +2377,6 @@ static esp_err_t display_hal_draw_text_bitmap_locked(int x, int y, const char *t
 
     uint8_t *framebuffer = display_hal_get_draw_framebuffer_locked();
     const bool direct = s_state.frame_active && framebuffer != NULL;
-    const bool blend = !display_color_is_opaque(text_color);
 
     int clip_left = 0;
     int clip_top = 0;
@@ -2395,55 +2389,94 @@ static esp_err_t display_hal_draw_text_bitmap_locked(int x, int y, const char *t
         }
     }
 
-    while (*text) {
-        unsigned char ch = (unsigned char)*text++;
-        if (ch == '\n') {
+    esp_err_t ret = ESP_OK;
+    const char *cursor = text;
+
+    while (*cursor != '\0') {
+        if (*cursor == '\n') {
+            cursor++;
             cursor_x = x;
-            cursor_y += font->height;
+            line_top += font->line_height;
             continue;
         }
-        if (ch == '\r') {
+        if (*cursor == '\r') {
+            cursor++;
             cursor_x = x;
             continue;
         }
-        if (ch == '\t') {
-            cursor_x += font->width * 4;
+        if (*cursor == '\t') {
+            cursor++;
+            cursor_x += space_advance * 4;
             continue;
-        }
-        if (ch < 32 || ch > 126) {
-            ESP_LOGE(TAG, "unsupported text character: 0x%02x", ch);
-            return ESP_ERR_INVALID_ARG;
         }
 
-        const uint8_t *bitmap = font->bitmap + ((size_t)(ch - 32) * font->height * bytes_per_row);
+        uint32_t codepoint = 0;
+        uint32_t next_codepoint = 0;
+        size_t consumed = display_ttf_utf8_decode(cursor, &codepoint);
+        if (consumed == 0) {
+            /* Skip the bad byte rather than aborting the whole string. */
+            ESP_LOGW(TAG, "skipping invalid utf-8 byte 0x%02x", (unsigned char)*cursor);
+            cursor++;
+            continue;
+        }
+        if (display_ttf_utf8_decode(cursor + consumed, &next_codepoint) == 0) {
+            next_codepoint = 0;
+        }
 
-        if (direct) {
-            /* Skip glyphs fully outside the clip. */
-            if (cursor_x + font->width > clip_left && cursor_x < clip_right &&
-                    cursor_y + font->height > clip_top && cursor_y < clip_bottom) {
-                display_hal_draw_glyph_direct_locked(framebuffer, cursor_x, cursor_y,
-                                                     bitmap, font->width, font->height,
-                                                     bytes_per_row,
-                                                     text_color, blend,
-                                                     clip_left, clip_top,
-                                                     clip_right, clip_bottom);
-            }
-        } else {
-            /* Fallback: no active framebuffer, per-pixel fill_rect submit. */
-            for (int dy = 0; dy < font->height; ++dy) {
-                for (int dx = 0; dx < font->width; ++dx) {
-                    uint8_t bits = bitmap[(size_t)dy * bytes_per_row + dx / 8];
-                    if ((bits & (0x80U >> (dx & 7))) == 0) {
-                        continue;
+        display_ttf_glyph_t glyph;
+        if (display_ttf_glyph_get(font, codepoint, next_codepoint, &glyph)) {
+            const int glyph_x = cursor_x + glyph.offset_x;
+            const int glyph_y = line_top + baseline_offset - (int)glyph.box_h - glyph.offset_y;
+
+            if (glyph.is_placeholder) {
+                ret = display_hal_draw_missing_glyph_locked(glyph_x, glyph_y,
+                                                            (int)glyph.box_w, (int)glyph.box_h,
+                                                            text_color);
+            } else if (glyph.box_w > 0 && glyph.box_h > 0) {
+                if (direct) {
+                    /* Skip glyphs fully outside the clip. */
+                    if (glyph_x + (int)glyph.box_w > clip_left && glyph_x < clip_right &&
+                            glyph_y + (int)glyph.box_h > clip_top && glyph_y < clip_bottom) {
+                        display_hal_blit_glyph_locked(framebuffer, glyph_x, glyph_y,
+                                                      glyph.coverage,
+                                                      glyph.box_w, glyph.box_h, glyph.stride,
+                                                      text_color,
+                                                      clip_left, clip_top,
+                                                      clip_right, clip_bottom);
                     }
-                    esp_err_t ret = display_hal_draw_pixel_locked(cursor_x + dx, cursor_y + dy, text_color);
-                    if (ret != ESP_OK) {
-                        return ret;
+                } else {
+                    /* Fallback: no active framebuffer, per-pixel fill_rect submit. */
+                    display_color_t pixel_color = text_color;
+                    for (int dy = 0; dy < (int)glyph.box_h && ret == ESP_OK; ++dy) {
+                        const uint8_t *coverage_row = glyph.coverage + (size_t)dy * glyph.stride;
+                        for (int dx = 0; dx < (int)glyph.box_w; ++dx) {
+                            uint32_t alpha = coverage_row[dx];
+                            if (alpha == 0) {
+                                continue;
+                            }
+                            if (text_color.a != 255) {
+                                alpha = (alpha * text_color.a + 127) / 255;
+                                if (alpha == 0) {
+                                    continue;
+                                }
+                            }
+                            pixel_color.a = (uint8_t)alpha;
+                            ret = display_hal_draw_pixel_locked(glyph_x + dx, glyph_y + dy, pixel_color);
+                            if (ret != ESP_OK) {
+                                break;
+                            }
+                        }
                     }
                 }
             }
+            cursor_x += glyph.advance;
+            display_ttf_glyph_release(&glyph);
         }
-        cursor_x += font->width;
+        cursor += consumed;
+
+        if (ret != ESP_OK) {
+            return ret;
+        }
     }
 
     /* Direct-path dirty union: whole text bbox in one shot. */
@@ -2462,7 +2495,7 @@ static esp_err_t display_hal_draw_text_bitmap_locked(int x, int y, const char *t
 /* Draw text with pre-computed metrics. Requires HAL lock held. Alpha
    text/bg needs an active framebuffer. */
 static esp_err_t display_hal_draw_text_prepared_locked(int x, int y, const char *text,
-                                                       const esp_painter_basic_font_t *font,
+                                                       const lv_font_t *font,
                                                        int text_w, int text_h,
                                                        display_color_t text_color,
                                                        bool has_bg, display_color_t bg_color)
@@ -2490,7 +2523,7 @@ static esp_err_t display_hal_draw_text_prepared_locked(int x, int y, const char 
 esp_err_t display_hal_draw_text(int x, int y, const char *text, uint8_t font_size,
                                 display_color_t text_color, bool has_bg, display_color_t bg_color)
 {
-    const esp_painter_basic_font_t *font = NULL;
+    const lv_font_t *font = NULL;
     uint16_t text_w = 0;
     uint16_t text_h = 0;
     esp_err_t ret = display_hal_lock();
@@ -2510,7 +2543,8 @@ esp_err_t display_hal_draw_text(int x, int y, const char *text, uint8_t font_siz
     }
 
     font = display_hal_get_font(font_size);
-    ESP_GOTO_ON_FALSE(font != NULL, ESP_ERR_NOT_SUPPORTED, fail, TAG, "font size %u unavailable", font_size);
+    ESP_GOTO_ON_FALSE(font != NULL, ESP_ERR_NOT_SUPPORTED, fail, TAG,
+                      "text backend unavailable for size %u", font_size);
     display_hal_measure_text_raw(text, font, &text_w, &text_h);
     ret = display_hal_draw_text_prepared_locked(x, y, text, font, (int)text_w, (int)text_h,
                                                 text_color, has_bg, bg_color);
@@ -2526,13 +2560,13 @@ esp_err_t display_hal_draw_text_aligned(int x, int y, int width, int height,
                                         display_hal_text_align_t align,
                                         display_hal_text_valign_t valign)
 {
-    const esp_painter_basic_font_t *font = display_hal_get_font(font_size);
+    const lv_font_t *font = display_hal_get_font(font_size);
     uint16_t text_w = 0;
     uint16_t text_h = 0;
     esp_err_t ret;
 
     if (font == NULL) {
-        ESP_LOGE(TAG, "font size %u unavailable", font_size);
+        ESP_LOGE(TAG, "text backend unavailable for size %u", font_size);
         return ESP_ERR_NOT_SUPPORTED;
     }
     if (text == NULL) {

@@ -71,6 +71,9 @@ static inline void lua_lvgl_web_tabview_set_tab_text(lv_obj_t *tv, uint32_t inde
 #define LUA_MODULE_LVGL_PATH_MAX 256
 #define LUA_LVGL_FONT_MT "lvgl.font"
 #define LUA_MODULE_LVGL_DEFAULT_FONT_PATH "fonts/NotoSansSC-Regular-sub.ttf"
+/* Monochrome emoji companion, chained through lv_font_t.fallback so Lua labels
+   render emoji the same way the system UI does. */
+#define LUA_MODULE_LVGL_DEFAULT_EMOJI_FONT_PATH "fonts/NotoEmoji-Regular-sub.ttf"
 #define LUA_MODULE_LVGL_DEFAULT_FONT_SIZE 24
 
 typedef enum {
@@ -226,6 +229,9 @@ typedef struct {
     lv_font_t *default_font;
     uint8_t *default_font_data;
     size_t default_font_data_size;
+    lv_font_t *default_emoji_font;
+    uint8_t *default_emoji_font_data;
+    size_t default_emoji_font_data_size;
     uint32_t default_font_size;
     uint32_t default_font_cache_size;
     char default_font_path[LUA_MODULE_LVGL_PATH_MAX];

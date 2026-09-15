@@ -80,9 +80,8 @@ export function createConfigTab<T extends object>(options: ConfigTabOptions<T>):
     load();
   });
 
-  /* Keep the form in sync if another tab updates the same group (e.g. a
-   * wechat login writes wechat_token). Only refresh the baseline when the
-   * form is not dirty, so we never clobber in-progress edits. */
+  /* Keep the form in sync if another part of the UI updates the same group.
+   * Only refresh a clean form, so in-progress edits are never clobbered. */
   createEffect(() => {
     void appConfig();
     if (!isGroupLoadedAll(options.groups)) return;

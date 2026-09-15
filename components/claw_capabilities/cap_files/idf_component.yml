@@ -2,5 +2,5 @@
 dependencies:
   claw_cap:
     path: ../../claw_modules/claw_cap
-  claw_core:
-    path: ../../claw_modules/claw_core
+  claw_paths:
+    path: ../../claw_modules/claw_paths

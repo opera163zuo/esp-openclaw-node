@@ -72,7 +72,6 @@
 #include "lua_module_environmental_sensor.h"
 #endif
 #if CONFIG_APP_CLAW_LUA_MODULE_EVENT_PUBLISHER
-#include "lua_module_event_publisher.h"
 #endif
 #if CONFIG_APP_CLAW_LUA_MODULE_HTTP_SERVER
 #include "lua_module_http_server.h"
@@ -465,11 +464,6 @@ static esp_err_t app_lua_register_environmental_sensor(const char *fatfs_base_pa
 #endif
 
 #if CONFIG_APP_CLAW_LUA_MODULE_EVENT_PUBLISHER
-static esp_err_t app_lua_register_event_publisher(const char *fatfs_base_path)
-{
-    (void)fatfs_base_path;
-    return lua_module_event_publisher_register();
-}
 #endif
 
 #if CONFIG_APP_CLAW_LUA_MODULE_HTTP_SERVER
@@ -665,7 +659,6 @@ static const app_lua_module_entry_t s_lua_module_entries[] = {
     { "environmental_sensor", "Environmental Sensor", app_lua_register_environmental_sensor },
 #endif
 #if CONFIG_APP_CLAW_LUA_MODULE_EVENT_PUBLISHER
-    { "event_publisher", "Event Publisher", app_lua_register_event_publisher },
 #endif
 #if CONFIG_APP_CLAW_LUA_MODULE_HTTP_SERVER
     { "http_server", "HTTP Server", app_lua_register_http_server },
@@ -778,7 +771,6 @@ static const app_lua_module_info_t s_lua_module_infos[] = {
     { "environmental_sensor", "Environmental Sensor" },
 #endif
 #if CONFIG_APP_CLAW_LUA_MODULE_EVENT_PUBLISHER
-    { "event_publisher", "Event Publisher" },
 #endif
 #if CONFIG_APP_CLAW_LUA_MODULE_HTTP_SERVER
     { "http_server", "HTTP Server" },

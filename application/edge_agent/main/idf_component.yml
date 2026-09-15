@@ -51,6 +51,9 @@ dependencies:
   wifi_manager:
     path: ../../../components/common/wifi_manager
 
+  time_sync:
+    path: ../../../components/common/time_sync
+
   esp_video:
     path: ../../../components/common/esp_video
     matches:

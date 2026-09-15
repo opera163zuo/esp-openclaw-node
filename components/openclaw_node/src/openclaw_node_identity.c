@@ -78,6 +78,8 @@ static esp_err_t load_seed(bool *exists)
 esp_err_t openclaw_node_identity_init(void)
 {
     if (s_ready) return ESP_OK;
+    /* The firmware build keeps this seed in NVS. Production provisioning must
+     * enable flash/NVS encryption or replace this storage with a secure element. */
     bool exists = false;
     esp_err_t err = load_seed(&exists);
     if (err != ESP_OK) return err;

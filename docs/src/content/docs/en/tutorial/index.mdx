@@ -51,16 +51,9 @@ idf.py -p /dev/cu.usbmodem101 flash
 
 Verify the M5Stack StickS3, ESP32-S3-PICO-1, 8 MB Flash, 8 MB PSRAM, and serial port before flashing.
 
-## Security
+## Provisioning and security
 
-The default firmware has no Gateway credentials:
-
-```c
-#define OPENCLAW_NODE_GATEWAY_URL ""
-#define OPENCLAW_NODE_GATEWAY_TOKEN ""
-```
-
-Temporary integration credentials must stay in a local uncommitted overlay. Never put Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. After testing, restore empty URL/token settings and Gateway `bind=loopback`.
+The Gateway URL, optional token, and device family are stored through the local AP provisioning portal in NVS; leaving the URL empty keeps the Native Node disabled. There are no compile-time Gateway connection macros. Temporary integration credentials must stay in a local uncommitted configuration. Never put Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. The development configuration leaves Flash/NVS encryption disabled; production devices should design key, backup, and recovery procedures before enabling encryption or using a secure element. Do not enable encryption and flash an existing device without that preparation.
 
 ## Repository layout
 

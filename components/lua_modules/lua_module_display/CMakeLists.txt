@@ -10,7 +10,7 @@ idf_component_register(
     REQUIRES
         cap_lua
         display_service
+        display_ttf
         esp_lcd
-        esp_painter
         lua_module_image
 )

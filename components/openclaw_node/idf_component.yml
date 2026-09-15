@@ -5,3 +5,9 @@ dependencies:
     public: true
   system_ui:
     path: ../common/system_ui
+  cap_files:
+    path: ../claw_capabilities/cap_files
+  cap_lua:
+    path: ../claw_capabilities/cap_lua
+  esp_codec_dev: "*"
+  espressif/esp_board_manager: "*"

@@ -258,45 +258,12 @@ static void lua_module_capability_fill_context(lua_State *L, int opts_index, cla
             luaL_error(L, "opts must be a table");
         }
 
-        value = lua_module_capability_get_string_field(L, opts_index, "session_id");
-        if (value && value[0]) {
-            ctx->session_id = value;
-        }
-
-        value = lua_module_capability_get_string_field(L, opts_index, "channel");
-        if (value && value[0]) {
-            ctx->channel = value;
-        }
-
-        value = lua_module_capability_get_string_field(L, opts_index, "chat_id");
-        if (value && value[0]) {
-            ctx->chat_id = value;
-        }
-
         value = lua_module_capability_get_string_field(L, opts_index, "source_cap");
         if (value && value[0]) {
             ctx->source_cap = value;
         }
     }
 
-    if (!ctx->session_id) {
-        value = lua_module_capability_get_args_string_field(L, "session_id");
-        if (value && value[0]) {
-            ctx->session_id = value;
-        }
-    }
-    if (!ctx->channel) {
-        value = lua_module_capability_get_args_string_field(L, "channel");
-        if (value && value[0]) {
-            ctx->channel = value;
-        }
-    }
-    if (!ctx->chat_id) {
-        value = lua_module_capability_get_args_string_field(L, "chat_id");
-        if (value && value[0]) {
-            ctx->chat_id = value;
-        }
-    }
     if (!ctx->source_cap) {
         value = lua_module_capability_get_args_string_field(L, "source_cap");
         if (value && value[0]) {

@@ -11,7 +11,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "claw_skill.h"
 #include "esp_check.h"
 #include "esp_jpeg_dec.h"
 #include "esp_log.h"
@@ -325,70 +324,15 @@ static void system_ui_launcher_insert_app_sorted(system_ui_launcher_app_t *app)
     s_ui.launcher_app_count++;
 }
 
-static esp_err_t system_ui_launcher_add_skill_entry(const claw_skill_catalog_entry_t *entry, void *user_ctx)
-{
-    system_ui_launcher_app_t *app = NULL;
-
-    (void)user_ctx;
-
-    if (!entry || !entry->execution || !entry->execution->visible) {
-        return ESP_OK;
-    }
-    if (s_ui.launcher_app_count >= SYSTEM_UI_LAUNCHER_MAX_APPS) {
-        ESP_LOGW(SYSTEM_UI_TAG, "skip launcher app: capacity reached");
-        return ESP_OK;
-    }
-    if (!entry->id || !entry->id[0] || !entry->execution->entry || !system_ui_launcher_action_is_valid(entry->execution->entry)) {
-        ESP_LOGW(SYSTEM_UI_TAG, "skip invalid launcher execution: id=%s", entry && entry->id ? entry->id : "(null)");
-        return ESP_OK;
-    }
-    if (entry->execution->icon && !system_ui_launcher_icon_path_is_valid(entry->execution->icon)) {
-        ESP_LOGW(SYSTEM_UI_TAG, "ignore invalid launcher icon: id=%s", entry->id);
-    }
-
-    app = calloc(1, sizeof(*app));
-    ESP_RETURN_ON_FALSE(app != NULL, ESP_ERR_NO_MEM, SYSTEM_UI_TAG, "alloc launcher app failed");
-
-    if (strlcpy(app->id, entry->id, sizeof(app->id)) >= sizeof(app->id) ||
-            strlcpy(app->title, entry->id, sizeof(app->title)) >= sizeof(app->title) ||
-            strlcpy(app->action, entry->execution->entry, sizeof(app->action)) >= sizeof(app->action)) {
-        ESP_LOGW(SYSTEM_UI_TAG, "skip launcher app with long fields: id=%s", entry->id);
-        free(app);
-        return ESP_OK;
-    }
-    app->order = entry->execution->order;
-    if (entry->execution->args_json && strlcpy(app->args_json, entry->execution->args_json, sizeof(app->args_json)) >= sizeof(app->args_json)) {
-        ESP_LOGW(SYSTEM_UI_TAG, "skip launcher app with long args: id=%s", entry->id);
-        free(app);
-        return ESP_OK;
-    }
-    if (entry->execution->icon && system_ui_launcher_icon_path_is_valid(entry->execution->icon)) {
-        if (strlcpy(app->icon_path, entry->execution->icon, sizeof(app->icon_path)) >= sizeof(app->icon_path)) {
-            ESP_LOGW(SYSTEM_UI_TAG, "ignore long launcher icon path: id=%s", entry->id);
-            app->icon_path[0] = '\0';
-        }
-    }
-
-    system_ui_launcher_insert_app_sorted(app);
-    return ESP_OK;
-}
-
 esp_err_t system_ui_launcher_load_locked(void)
 {
-    esp_err_t ret;
-
     system_ui_launcher_unload_icons();
     s_ui.launcher_page_count = 0;
     system_ui_launcher_set_default_layout();
 
-    ret = claw_skill_foreach_catalog_entry(system_ui_launcher_add_skill_entry, NULL);
-    if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(SYSTEM_UI_TAG, "launcher deferred: skill registry not ready");
-        system_ui_launcher_ensure_page_count();
-        return ESP_OK;
-    }
-    ESP_RETURN_ON_ERROR(ret, SYSTEM_UI_TAG, "load launcher skills failed");
-
+    /* The launcher used to be populated from the skill catalog. Skills are an
+     * Agent concept and this build has no Agent, so it now falls back to the
+     * default layout. Lua scripts are the natural replacement source here. */
     system_ui_launcher_ensure_page_count();
     ESP_LOGI(SYSTEM_UI_TAG, "loaded %u launcher apps in %u pages",
              (unsigned)s_ui.launcher_app_count, (unsigned)s_ui.launcher_page_count);

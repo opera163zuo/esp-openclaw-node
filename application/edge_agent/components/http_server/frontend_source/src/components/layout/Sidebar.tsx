@@ -1,12 +1,6 @@
 import {
   Activity,
-  Blocks,
-  Bot,
-  DatabaseZap,
   Folder,
-  MessageSquareCode,
-  MessagesSquare,
-  Search,
   Settings,
   SquareFunction,
   WifiPen,
@@ -21,14 +15,8 @@ const iconClass = 'w-4 h-4 shrink-0';
 const IconStatus: Component = () => <Activity class={iconClass} />;
 const IconGear: Component = () => <Settings class={iconClass} />;
 const IconWifi: Component = () => <WifiPen class={iconClass} />;
-const IconLlm: Component = () => <Bot class={iconClass} />;
-const IconIm: Component = () => <MessageSquareCode class={iconClass} />;
-const IconSearch: Component = () => <Search class={iconClass} />;
-const IconMemory: Component = () => <DatabaseZap class={iconClass} />;
-const IconCaps: Component = () => <Blocks class={iconClass} />;
 const IconSkills: Component = () => <SquareFunction class={iconClass} />;
 const IconFiles: Component = () => <Folder class={iconClass} />;
-const IconWebIm: Component = () => <MessagesSquare class={iconClass} />;
 
 export type LeafNode = {
   kind: 'leaf';
@@ -36,14 +24,8 @@ export type LeafNode = {
   labelKey:
     | 'navStatus'
     | 'navBasic'
-    | 'navLlm'
-    | 'navIm'
-    | 'navWebReq'
-    | 'navMemory'
-    | 'navCapabilities'
     | 'navLuaModules'
-    | 'navFiles'
-    | 'navWebIm';
+    | 'navFiles';
   icon: Component;
 };
 export type GroupNode = {
@@ -64,14 +46,8 @@ export const NAV_TREE: NavNode[] = [
     icon: IconGear,
     children: [
       { kind: 'leaf', id: 'basic', labelKey: 'navBasic', icon: IconWifi },
-      { kind: 'leaf', id: 'llm', labelKey: 'navLlm', icon: IconLlm },
-      { kind: 'leaf', id: 'im', labelKey: 'navIm', icon: IconIm },
-      { kind: 'leaf', id: 'webreq', labelKey: 'navWebReq', icon: IconSearch },
     ],
   },
-  { kind: 'leaf', id: 'memory', labelKey: 'navMemory', icon: IconMemory },
-  { kind: 'leaf', id: 'webim', labelKey: 'navWebIm', icon: IconWebIm },
-  { kind: 'leaf', id: 'capabilities', labelKey: 'navCapabilities', icon: IconCaps },
   { kind: 'leaf', id: 'skills', labelKey: 'navLuaModules', icon: IconSkills },
   { kind: 'leaf', id: 'files', labelKey: 'navFiles', icon: IconFiles },
 ];

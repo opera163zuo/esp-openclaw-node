@@ -72,10 +72,10 @@ peripherals:
     type: gpio
     role: io
     config:
-      gpio_num: 11
+      pin: 11
       mode: GPIO_MODE_INPUT
-      pull_up_en: GPIO_PULLUP_ENABLE
-      pull_down_en: GPIO_PULLDOWN_DISABLE
+      pull_up: true
+      pull_down: false
       intr_type: GPIO_INTR_DISABLE
       default_level: 1
 
@@ -83,9 +83,9 @@ peripherals:
     type: gpio
     role: io
     config:
-      gpio_num: 12
+      pin: 12
       mode: GPIO_MODE_INPUT
-      pull_up_en: GPIO_PULLUP_ENABLE
-      pull_down_en: GPIO_PULLDOWN_DISABLE
+      pull_up: true
+      pull_down: false
       intr_type: GPIO_INTR_DISABLE
       default_level: 1

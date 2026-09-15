@@ -2,7 +2,7 @@
 
 OpenClaw Native Node firmware for **M5Stack StickS3 / ESP32-S3**.
 
-The project separates the OpenClaw Gateway from the embedded execution layer:
+The project turns the ESP32 into a small OpenClaw Native Node. The Gateway owns Agent, LLM, Memory, IM, authorization, and routing; the device owns Wi-Fi, identity, bounded hardware commands, live Lua programming, and display rendering:
 
 ```text
 OpenClaw Gateway
@@ -36,6 +36,9 @@ The ESP32 does not run the Agent or LLM. It executes only explicitly declared an
 - `device.info`, `device.status`, and `device.network`
 - `device.button.status`, `device.backlight`, and `device.restart`
 - `audio.volume` and `audio.tone`
+- Runtime Gateway URL, token, and device-family configuration without rebuilding
+- A Wi-Fi-only provisioning portal with no embedded LLM or IM setup
+- Live Lua scripts, file sandbox, and LVGL for rapid hardware and display experiments
 
 ### Native Node API reference
 
@@ -74,7 +77,7 @@ Fullscreen text example:
 }
 ```
 
-Physical landscape switching is not complete. `orientation: "landscape"` must not be treated as evidence that the LCD rotated.
+`orientation: "landscape"` lays the fullscreen text page out sideways (the label is rotated 90° as an object), but the **panel itself stays portrait** — the LCD is not physically rotated. See "Display API notes".
 
 #### Sandboxed file APIs
 
@@ -104,9 +107,116 @@ Arbitrary shell, terminal, `lua.eval`, and arbitrary command strings are not exp
 
 ## Display API notes
 
+### Fonts and character coverage
+
+Every string on screen goes through a single rendering path: LVGL `tiny_ttf` plus the
+`NotoSansSC-Regular-sub.ttf` shipped with the firmware (~1.1 MB, roughly 3700 glyphs).
+The system UI notice area, the fullscreen page, the clock, labels created through the Lua
+`lvgl` module, and the `display.text` family in the Lua `display` module all share the same
+font asset and the same size-to-glyph mapping, so the same string looks identical on every
+path.
+
+`text` is capped at 192 bytes for both `device.screen.text` and
+`device.screen.fullscreen.text`; oversized or empty strings are rejected.
+
+### Missing-glyph reporting
+
+Text is queued asynchronously, so `"shown": true` / `"accepted": true` only means the command
+was accepted — it cannot distinguish a real render from a row of missing-glyph boxes. Both
+commands therefore report one extra field:
+
+```json
+{"command":"device.screen.text","shown":true,"missing_glyphs":0}
+{"command":"device.screen.text","shown":true,"missing_glyphs":2,"first_missing":"U+1F9A9"}
+{"command":"device.screen.fullscreen.text","accepted":true,"missing_glyphs":null}
+```
+
+- `missing_glyphs: 0` — every character has a glyph.
+- `missing_glyphs: N` — N characters have no glyph and will draw as hollow boxes;
+  `first_missing` gives the code point of the first one so it can be located directly.
+- `missing_glyphs: null` — undetermined. This happens when the UI has not started yet (font not
+  loaded) or on `fullscreen.enter/clear/exit`, which carry no text. **null is not 0** — do not
+  read it as a pass.
+
+The check runs against the same font the notice layer draws with, so the answer matches what
+ends up on the panel.
+
+### Emoji
+
+`NotoEmoji-Regular-sub.ttf` (~260 KB, monochrome emoji subset) is chained behind the UI font
+as `lv_font_t.fallback`. `lv_font_get_glyph_dsc()` walks that chain, so emoji are drawn as
+ordinary glyphs and callers never have to substitute or pre-process them. For example `🦞`
+(U+1F99E), which the firmware itself uses in `router_rules.json` and `claw_core_events.c`,
+now renders correctly.
+
+If the emoji font file is missing, text still renders and emoji degrade to a visible
+missing-glyph box rather than silently disappearing.
+
+### Font size
+
+`font_size` on `display.text` and friends is a pixel height:
+
+- `0` selects the default of 24.
+- Other values are created and cached on demand, up to 16 sizes at a time; anything above
+  128 is clamped to 128.
+
+`device.screen.text` and `device.screen.fullscreen.text` take no size argument and both use
+the notice size (16 px).
+
+### Line breaks and orientation
+
+- `\n` breaks the line and advances by the font line height; `\r` returns to the start of the
+  line; `\t` advances by four space widths.
+- `orientation` on `device.screen.fullscreen.text` accepts `"portrait"` (the default) and
+  `"landscape"`, case-insensitively; `NULL` or an empty string means `"portrait"`. Any other
+  value logs an `ESP_LOGW` and falls back to portrait rather than silently pretending to
+  succeed.
+- Landscape is implemented as a **90° transform on the label object**
+  (`lv_obj_set_style_transform_rotation`), not by rotating the display controller. The panel
+  is a fixed 135×240 portrait ST7789 and the SPI adapter latches its rotation at registration
+  time, so changing LVGL's logical rotation at runtime would desynchronise the flush geometry
+  and corrupt frames after the fullscreen page is torn down. Landscape therefore affects only
+  the fullscreen text page; the panel orientation itself is unchanged. The label is re-laid
+  out with its axes swapped and then rotated as a whole, so text wraps along the long edge.
+
+### Adding characters
+
+Fonts are packaged as character subsets, so **any character outside the subset renders as a
+missing-glyph box**. After adding user-visible text (C code, Lua scripts,
+`router_rules.json`, and so on) you need to:
+
+1. Run the coverage audit to see whether anything was missed:
+
+   ```bash
+   python3 tools/font_subset/scan_chars.py --check \
+       --font application/edge_agent/fatfs_image/system/fonts/NotoSansSC-Regular-sub.ttf \
+       --emoji-font application/edge_agent/fatfs_image/system/fonts/NotoEmoji-Regular-sub.ttf
+   ```
+
+   It walks `components/`, `application/` and both READMEs and lists every character that
+   appears in **neither** character list, together with its `file:line` provenance. Add
+   `--update` to append what is missing to the appropriate list.
+
+   This check is wired into `.pre-commit-config.yaml` as the local hook
+   `font-character-coverage`, so it runs automatically whenever a file under `components/`,
+   `application/`, `tools/font_subset/` or either README changes. pre-commit installs the
+   fontTools dependency itself; the only prerequisite is running `pre-commit install` once.
+
+2. Re-run `tools/font_subset/build_fonts.py` to regenerate both font assets.
+3. Re-flash the `system` partition.
+
+See `tools/font_subset/README.md` for details. Note that the upstream Noto fonts are variable
+fonts and must be pinned to `wght=400` before subsetting, otherwise they look fine on the
+desktop but render incorrectly on the device.
+
+Running `--check` without `--font` only proves the **lists** are complete, not that the
+**font** contains those glyphs — a character can be listed yet still be absent from the font
+(that is exactly how U+3000 IDEOGRAPHIC SPACE slipped through). Use `--font` for an
+end-to-end answer.
+
 ## Not implemented
 
-- Stable runtime portrait/landscape switching
+- Panel-level runtime portrait/landscape switching (the fullscreen text page's landscape mode is an object transform and does not change the panel orientation itself)
 - Verified BLE HID pairing and host keyboard/mouse input
 - Camera, screenshots, screen capture, or full computer control
 - Arbitrary shell, terminal, or desktop scripting
@@ -130,16 +240,9 @@ idf.py -p /dev/cu.usbmodem101 flash
 
 Verify the board, chip, Flash, PSRAM, and serial port immediately before flashing. A successful flash is not feature acceptance; boot logs, Gateway reachability, command approval, invocation, and physical display output must be checked separately.
 
-## Security boundaries
+## Provisioning and security boundaries
 
-The default firmware has no Gateway credentials:
-
-```c
-#define OPENCLAW_NODE_GATEWAY_URL ""
-#define OPENCLAW_NODE_GATEWAY_TOKEN ""
-```
-
-Temporary integration credentials must stay in a local, uncommitted overlay. Never place Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. After live testing, restore empty URL/token settings and Gateway `bind=loopback`.
+The Gateway URL, optional token, and device family are stored through the local AP provisioning portal in NVS; leaving the URL empty keeps the Native Node disabled. There are no compile-time Gateway connection macros. Never place Gateway tokens, Wi-Fi passwords, API keys, private keys, or connection strings in Git, logs, or documentation. The identity seed is stored in NVS; the development configuration leaves Flash/NVS encryption disabled. Production devices must design key, backup, and recovery procedures before enabling encryption or using a secure element. Do not enable encryption and flash an existing device without that preparation.
 
 Arbitrary `shell.exec`, `terminal.exec`, `lua.eval`, and arbitrary command strings are not exposed.
 
