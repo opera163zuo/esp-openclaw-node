@@ -236,28 +236,11 @@ static esp_err_t openclaw_node_sign_cb(const char *payload,
 }
 
 /* A `wss://` handshake validates the Gateway certificate against the wall
- * clock, and SNTP runs on its own task. Without this the first attempt can be
- * thrown away on a 1970 timestamp. The wait is deliberately short because this
+ * clock, and SNTP runs on its own task. Without a wait the first attempt can be
+ * thrown away on a 1970 timestamp. The budget is deliberately short because this
  * runs on the portal task too (a Gateway change saved from the WebUI); anything
  * left over is covered by the WebSocket client's own reconnect loop. */
 #define OPENCLAW_WSS_CLOCK_WAIT_MS 5000
-
-static void wait_for_plausible_clock(void)
-{
-    if (time_sync_is_valid()) {
-        return;
-    }
-
-    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(OPENCLAW_WSS_CLOCK_WAIT_MS);
-    while (!time_sync_is_valid() && xTaskGetTickCount() < deadline) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-
-    if (!time_sync_is_valid()) {
-        ESP_LOGW(TAG, "Clock still unset after %d ms; the first wss:// handshake will fail "
-                      "until SNTP completes", OPENCLAW_WSS_CLOCK_WAIT_MS);
-    }
-}
 
 static void start_openclaw_node_if_configured(const app_config_t *app_config)
 {
@@ -268,8 +251,10 @@ static void start_openclaw_node_if_configured(const app_config_t *app_config)
 
     /* Only TLS checks the certificate dates, so a plain ws:// endpoint has no
      * reason to wait for the clock. */
-    if (strncmp(app_config->openclaw_gateway_url, "wss://", 6) == 0) {
-        wait_for_plausible_clock();
+    if (strncmp(app_config->openclaw_gateway_url, "wss://", 6) == 0 &&
+        time_sync_wait_valid(OPENCLAW_WSS_CLOCK_WAIT_MS) != ESP_OK) {
+        ESP_LOGW(TAG, "Clock still unset after %d ms; the first wss:// handshake "
+                      "will fail until SNTP completes", OPENCLAW_WSS_CLOCK_WAIT_MS);
     }
 
     size_t command_count = 0;

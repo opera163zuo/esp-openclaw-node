@@ -20,6 +20,7 @@ set(COMPONENTS main)
 set(EXTRA_COMPONENT_DIRS
     "../../../../components/openclaw_node"
     "../../../../components/common/settings"
+    "../../../../components/common/time_sync"
     "../../components/app_config"
     "../../components/http_server"
     "../../managed_components/espressif__esp_websocket_client"

@@ -10,5 +10,6 @@ idf_component_register(
         http_server
         json
         openclaw_node
+        time_sync
         unity
 )

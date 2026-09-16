@@ -26,6 +26,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "app_config.h"
 #include "cJSON.h"
@@ -44,6 +45,7 @@
 #include "lwip/sockets.h"
 #include "nvs_flash.h"
 #include "openclaw_node.h"
+#include "time_sync.h"
 #include "unity.h"
 #include "unity_test_runner.h"
 
@@ -829,6 +831,45 @@ TEST_CASE("openclaw_node: a wss:// endpoint starts a TLS handshake", "[openclaw_
                                          "nothing was written, so TLS was never started");
     TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x16, first_byte,
                                    "the first byte was not a TLS handshake record");
+}
+
+/* ── time_sync: waiting for a plausible clock ──────────────────────────── */
+
+/* A wss:// handshake is only started once the clock is plausible, because a TLS
+ * client validates the certificate dates against it. These cases pin both sides
+ * of that wait: it gives up after its budget rather than blocking the caller,
+ * and it returns at once when the clock is already good.
+ *
+ * time_sync_is_valid() is just "time(NULL) >= 2024-01-01", so settimeofday() is
+ * enough to drive both paths without SNTP or a network. Each case sets the clock
+ * itself, so the order they run in does not matter. */
+
+TEST_CASE("time_sync: an unset clock times out instead of blocking", "[time_sync]")
+{
+    const struct timeval epoch = { .tv_sec = 0, .tv_usec = 0 };
+    TEST_ASSERT_EQUAL(0, settimeofday(&epoch, NULL));
+    TEST_ASSERT_FALSE(time_sync_is_valid());
+
+    const int64_t started_us = esp_timer_get_time();
+    TEST_ASSERT_EQUAL(ESP_ERR_TIMEOUT, time_sync_wait_valid(300));
+    const int elapsed_ms = (int)((esp_timer_get_time() - started_us) / 1000);
+
+    ESP_LOGI(TAG, "time_sync_wait_valid(300) returned after %d ms", elapsed_ms);
+    TEST_ASSERT_GREATER_THAN_INT_MESSAGE(250, elapsed_ms, "returned before its budget");
+    TEST_ASSERT_LESS_THAN_INT_MESSAGE(1500, elapsed_ms, "waited past its budget");
+}
+
+TEST_CASE("time_sync: a plausible clock returns at once", "[time_sync]")
+{
+    const struct timeval future = { .tv_sec = 1900000000, .tv_usec = 0 };
+    TEST_ASSERT_EQUAL(0, settimeofday(&future, NULL));
+    TEST_ASSERT_TRUE(time_sync_is_valid());
+
+    const int64_t started_us = esp_timer_get_time();
+    TEST_ASSERT_EQUAL(ESP_OK, time_sync_wait_valid(5000));
+    const int elapsed_ms = (int)((esp_timer_get_time() - started_us) / 1000);
+
+    TEST_ASSERT_LESS_THAN_INT_MESSAGE(200, elapsed_ms, "waited despite a valid clock");
 }
 
 void setUp(void)

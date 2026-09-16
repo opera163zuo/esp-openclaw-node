@@ -34,6 +34,22 @@ void time_sync_stop(void);
 /** @brief True once the wall clock has been set to something plausible. */
 bool time_sync_is_valid(void);
 
+/**
+ * @brief Wait, up to @p timeout_ms, for the wall clock to become plausible.
+ *
+ * A TLS client validates the server certificate against the wall clock, so a
+ * caller that is about to open a `wss://` connection wants the clock set before
+ * its first handshake - otherwise that attempt is thrown away on a 1970
+ * timestamp. The background worker keeps retrying, so waiting here only helps;
+ * whatever is left over is covered by the caller's own reconnect loop.
+ *
+ * Returns immediately when the clock is already plausible.
+ *
+ * @return ESP_OK once the clock is plausible, ESP_ERR_TIMEOUT if it is still
+ *         unset when the budget runs out.
+ */
+esp_err_t time_sync_wait_valid(uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif

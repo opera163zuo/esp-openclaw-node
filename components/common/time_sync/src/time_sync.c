@@ -24,6 +24,8 @@ static const char *TAG = "time_sync";
 #define TIME_SYNC_SYNC_WAIT_MS     3000
 #define TIME_SYNC_SYNC_RETRIES     15
 #define TIME_SYNC_RETRY_DELAY_MS   5000
+/* How often time_sync_wait_valid() re-checks while it waits. */
+#define TIME_SYNC_POLL_INTERVAL_MS 100
 #define TIME_SYNC_TASK_STACK       4096
 #define TIME_SYNC_TASK_PRIORITY    5
 
@@ -33,6 +35,20 @@ static bool s_running;
 bool time_sync_is_valid(void)
 {
     return time(NULL) >= TIME_SYNC_MIN_VALID_EPOCH;
+}
+
+esp_err_t time_sync_wait_valid(uint32_t timeout_ms)
+{
+    if (time_sync_is_valid()) {
+        return ESP_OK;
+    }
+
+    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    while (!time_sync_is_valid() && xTaskGetTickCount() < deadline) {
+        vTaskDelay(pdMS_TO_TICKS(TIME_SYNC_POLL_INTERVAL_MS));
+    }
+
+    return time_sync_is_valid() ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
 static void time_sync_notification_cb(struct timeval *tv)
