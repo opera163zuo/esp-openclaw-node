@@ -16,26 +16,30 @@ set(http_server_srcs
     "http_server_core.c"
     "http_server_assets.c"
     "http_server_config_api.c"
-    "http_server_lua_modules_api.c"
     "http_server_status_api.c"
     "http_server_files_api.c"
     "http_server_json.c"
     "http_server_utils.c"
 )
 
-# app_claw is needed for the Lua module listing in http_server_lua_modules_api.c.
-# claw_cap is not referenced anywhere in this component and was dropped.
+# Only the unconditional dependencies belong here. app_claw and
+# lua_module_http_server are declared in idf_component.yml instead, because a
+# CONFIG_-conditional REQUIRES does not take effect: this file runs several
+# times while sdkconfig is generated and the component is registered from the
+# earliest pass, before those symbols exist.
 set(http_server_requires
     app_config
-    app_claw
     esp_http_server
     heap
     mbedtls
 )
 
+if(CONFIG_HTTP_SERVER_LUA_MODULES_API)
+    list(APPEND http_server_srcs "http_server_lua_modules_api.c")
+endif()
+
 if(CONFIG_APP_CLAW_LUA_MODULE_HTTP_SERVER)
     list(APPEND http_server_srcs "http_server_lua_app_api.c")
-    list(APPEND http_server_requires lua_module_http_server)
 endif()
 
 idf_component_register(

@@ -5,6 +5,10 @@ CONFIG_IDF_TARGET="esp32s3"
 # this build.
 CONFIG_OPENCLAW_NODE_DEVICE_COMMANDS=n
 
+# The only part of the server that reads app_claw directly. Off, so the server
+# builds without the capability framework.
+CONFIG_HTTP_SERVER_LUA_MODULES_API=n
+
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y

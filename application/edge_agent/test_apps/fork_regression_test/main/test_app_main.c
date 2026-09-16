@@ -32,12 +32,14 @@
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_heap_caps.h"
+#include "esp_http_client.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "http_server.h"
 #include "nvs_flash.h"
 #include "openclaw_node.h"
 #include "unity.h"
@@ -506,6 +508,125 @@ TEST_CASE("openclaw_node: a slow command does not stall the socket", "[openclaw_
     ESP_LOGI(TAG, "slow command: %d pong(s) answered meanwhile", s_gw.pong_count);
 
     stop_fake_gateway();
+}
+
+/* ── http_server: the storage-root guard on delete ─────────────────────── */
+
+/* The guard runs before the handler touches the filesystem, so these cases need
+ * no mounted partition. A refused delete answers 400; an accepted one falls
+ * through to stat() and answers 404 because nothing is mounted. That difference
+ * is the assertion, and it is what proves the guard is actually wired in rather
+ * than merely correct in isolation. */
+
+static esp_err_t stub_load_config(app_config_t *config)
+{
+    memset(config, 0, sizeof(*config));
+    app_config_load_defaults(config);
+    return ESP_OK;
+}
+
+static esp_err_t stub_save_config(const app_config_t *config)
+{
+    (void)config;
+    return ESP_OK;
+}
+
+static esp_err_t stub_get_wifi_status(http_server_wifi_status_t *status)
+{
+    memset(status, 0, sizeof(*status));
+    return ESP_OK;
+}
+
+static esp_err_t stub_restart_device(void)
+{
+    return ESP_OK;
+}
+
+static int http_delete(const char *query, char *body, size_t body_size)
+{
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1/api/files?%s", query);
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_DELETE,
+        .timeout_ms = 5000,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        return -1;
+    }
+    if (esp_http_client_open(client, 0) != ESP_OK) {
+        esp_http_client_cleanup(client);
+        return -1;
+    }
+    esp_http_client_fetch_headers(client);
+    int status = esp_http_client_get_status_code(client);
+    int read = esp_http_client_read_response(client, body, body_size - 1);
+    body[read > 0 ? (size_t)read : 0] = '\0';
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+    return status;
+}
+
+static void start_http_server_for_test(void)
+{
+    const http_server_config_t config = {
+        /* The refused cases never reach it, and it is absent for the rest. */
+        .storage_base_path = "/no_such_storage",
+        .services = {
+            .load_config = stub_load_config,
+            .save_config = stub_save_config,
+            .get_wifi_status = stub_get_wifi_status,
+            .restart_device = stub_restart_device,
+        },
+    };
+    TEST_ASSERT_EQUAL(ESP_OK, http_server_init(&config));
+    TEST_ASSERT_EQUAL(ESP_OK, http_server_start());
+}
+
+static void assert_delete_refused(const char *query)
+{
+    char body[256];
+    int status = http_delete(query, body, sizeof(body));
+    ESP_LOGI(TAG, "DELETE ?%s -> %d %s", query, status, body);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(400, status, query);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(body, "storage root"),
+                                 "expected the storage-root refusal");
+}
+
+static void assert_delete_allowed(const char *query)
+{
+    char body[256];
+    int status = http_delete(query, body, sizeof(body));
+    ESP_LOGI(TAG, "DELETE ?%s -> %d %s", query, status, body);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(404, status, query);
+}
+
+TEST_CASE("http_server: deleting the storage root is refused", "[http_server]")
+{
+    start_http_server_for_test();
+
+    /* Every spelling the VFS resolves to the base directory. */
+    assert_delete_refused("path=%2F&recursive=1");
+    assert_delete_refused("path=%2F%2F&recursive=1");
+    assert_delete_refused("path=%2F.&recursive=1");
+    assert_delete_refused("path=%2F.%2F&recursive=1");
+    assert_delete_refused("path=%2F.%2F%2F&recursive=1");
+
+    TEST_ASSERT_EQUAL(ESP_OK, http_server_stop());
+}
+
+TEST_CASE("http_server: ordinary deletes are not mistaken for the root", "[http_server]")
+{
+    start_http_server_for_test();
+
+    assert_delete_allowed("path=%2Fsomefile");
+    assert_delete_allowed("path=%2F.foo");             /* a hidden name */
+    assert_delete_allowed("path=%2F.%2Fsomefile");     /* a real child */
+    assert_delete_allowed("path=%2Fdir%2F.");          /* "dir/." is not the root */
+
+    TEST_ASSERT_EQUAL(ESP_OK, http_server_stop());
 }
 
 void setUp(void)

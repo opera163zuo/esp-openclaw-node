@@ -21,15 +21,13 @@ set(OPENCLAW_NODE_REQUIRES
 # system UI and the capability framework. Keeping it behind a switch lets the
 # transport be built - and tested on target - on its own; the stub keeps the
 # public API linkable for callers such as the application's main.
+#
+# Those dependencies are declared in idf_component.yml rather than appended to
+# REQUIRES here, because a CONFIG_-conditional REQUIRES does not take effect:
+# this file runs several times while sdkconfig is generated and the component is
+# registered from the earliest pass, before the symbol exists.
 if(CONFIG_OPENCLAW_NODE_DEVICE_COMMANDS)
     list(APPEND OPENCLAW_NODE_SRCS "src/openclaw_node_device.c")
-    list(APPEND OPENCLAW_NODE_REQUIRES
-        esp_board_manager
-        esp_codec_dev
-        system_ui
-        cap_files
-        cap_lua
-    )
 else()
     list(APPEND OPENCLAW_NODE_SRCS "src/openclaw_node_device_stub.c")
 endif()

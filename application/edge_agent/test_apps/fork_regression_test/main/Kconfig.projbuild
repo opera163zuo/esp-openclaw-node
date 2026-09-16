@@ -12,4 +12,12 @@ menu "Test App Config"
         string "Default Wi-Fi password"
         default ""
 
+    # http_server's manifest gates lua_module_http_server on this symbol, and
+    # app_claw is deliberately not part of this build, so nothing else would
+    # define it. Off, which is what keeps that component out too.
+
+    config APP_CLAW_CAP_LUA
+        bool "app_claw Lua capability (absent in this test build)"
+        default n
+
 endmenu

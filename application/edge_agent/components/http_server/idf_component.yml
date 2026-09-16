@@ -1,6 +1,23 @@
+## IDF Component Manager Manifest File
+##
+## The gated dependencies are declared here rather than in CMakeLists' REQUIRES
+## because a condition on CONFIG_* there does not take effect: the component
+## CMakeLists runs several times while sdkconfig is being generated and the
+## component is registered from the earliest pass, before those symbols exist.
+## The component manager evaluates these rules after configuration, so they do
+## hold - which is why lua_module_http_server has always resolved correctly.
+##
+## app_claw is needed only for GET /api/lua-modules, which reads the compiled
+## module list straight out of it. Without it the server builds against nothing
+## but app_config, esp_http_server, heap and mbedtls.
 dependencies:
   espressif/cjson:
     version: "^1.7.19"
+
+  app_claw:
+    rules:
+      - if: $CONFIG{HTTP_SERVER_LUA_MODULES_API} == True
+    path: ../../../../components/common/app_claw
 
   lua_module_http_server:
     rules:

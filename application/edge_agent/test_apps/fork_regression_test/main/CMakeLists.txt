@@ -5,7 +5,9 @@ idf_component_register(
         "."
     PRIV_REQUIRES
         app_config
+        esp_http_client
         esp_http_server
+        http_server
         json
         openclaw_node
         unity

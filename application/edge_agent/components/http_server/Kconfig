@@ -1,0 +1,16 @@
+menu "HTTP Server"
+
+    config HTTP_SERVER_LUA_MODULES_API
+        bool "Lua module listing API"
+        default y
+        help
+            Serve GET /api/lua-modules, which the portal uses to list the Lua
+            modules compiled into this build.
+
+            This is the only part of the server that reads the module list
+            straight out of app_claw, so turning it off drops that dependency
+            and lets the server be built without the capability framework. The
+            dependency itself is declared in idf_component.yml, because a
+            condition on this symbol inside CMakeLists does not take effect.
+
+endmenu

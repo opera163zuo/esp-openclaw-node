@@ -7,8 +7,9 @@ cmake_minimum_required(VERSION 3.16)
 # edge_agent's already-downloaded managed components.
 #
 # openclaw_node is built with CONFIG_OPENCLAW_NODE_DEVICE_COMMANDS off and
-# app_config needs only settings, so the board manager, the system UI, LVGL and
-# the capability framework all stay out of the build: these tests run without a
+# http_server with CONFIG_HTTP_SERVER_LUA_MODULES_API off, and app_config needs
+# only settings, so the board manager, the system UI, LVGL, app_claw and the
+# capability framework all stay out of the build: these tests run without a
 # board, a display or the audio stack.
 set(COMPONENTS main)
 
@@ -20,6 +21,7 @@ set(EXTRA_COMPONENT_DIRS
     "../../../../components/openclaw_node"
     "../../../../components/common/settings"
     "../../components/app_config"
+    "../../components/http_server"
     "../../managed_components/espressif__esp_websocket_client"
 )
 
