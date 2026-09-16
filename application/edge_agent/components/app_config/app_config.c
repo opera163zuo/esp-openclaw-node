@@ -169,6 +169,11 @@ esp_err_t app_config_save(const app_config_t *config)
     if (!config) {
         return ESP_ERR_INVALID_ARG;
     }
+    /* Checked before the write, not after: returning here once NVS has already
+     * been updated would leave the cache holding the previous values, which is
+     * the one way this cache could go stale. */
+    ESP_RETURN_ON_FALSE(s_cache_lock, ESP_ERR_INVALID_STATE, TAG,
+                        "app_config_init() was not called");
 
     esp_err_t err = app_config_write_nvs(config);
     if (err != ESP_OK) {
@@ -177,8 +182,6 @@ esp_err_t app_config_save(const app_config_t *config)
 
     /* Refresh the cache, otherwise the next load would hand back the values
      * from before this save. */
-    ESP_RETURN_ON_FALSE(s_cache_lock, ESP_ERR_INVALID_STATE, TAG,
-                        "app_config_init() was not called");
     xSemaphoreTake(s_cache_lock, portMAX_DELAY);
     s_cache = *config;
     s_cache_valid = true;

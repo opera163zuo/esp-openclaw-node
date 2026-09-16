@@ -518,6 +518,9 @@ static void fake_gateway_task(void *arg)
         const size_t body = TEST_SPLIT_FRAME_LEN - 3;   /* room for the closing "}} */
         if (body > prefix) {
             memset(invoke + prefix, 'p', body - prefix);
+            /* Terminate explicitly rather than relying on calloc having zeroed
+             * the tail, which strlcat below would otherwise need. */
+            invoke[body] = '\0';
         }
         strlcat(invoke, "\"}}", TEST_SPLIT_FRAME_LEN + 1);
 
