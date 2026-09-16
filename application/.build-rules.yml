@@ -10,3 +10,10 @@ application/edge_agent:
 application/mcp_server_point:
   enable:
     - if: INCLUDE_DEFAULT == 1
+
+# On-target regression suite for the Native Node transport, the config cache and
+# the storage-root guard. It is not a board-manager project, so the board matrix
+# does not change what it builds; it only needs to compile.
+application/edge_agent/test_apps/fork_regression_test:
+  enable:
+    - if: INCLUDE_DEFAULT == 1

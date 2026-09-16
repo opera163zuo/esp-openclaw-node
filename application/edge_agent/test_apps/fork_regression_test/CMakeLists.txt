@@ -13,17 +13,16 @@ cmake_minimum_required(VERSION 3.16)
 # board, a display or the audio stack.
 set(COMPONENTS main)
 
-# Only the one managed component the transport actually needs. Pointing at the
-# whole managed_components directory instead would make the build evaluate
-# esp_board_manager's manifest, whose rules reference board Kconfig symbols that
-# this build never defines.
+# The WebSocket client comes from main/idf_component.yml, so the component
+# manager fetches it into this app's own managed_components. Reaching into
+# edge_agent's copy would only work on a machine that had already built
+# edge_agent, since managed_components is not checked in.
 set(EXTRA_COMPONENT_DIRS
     "../../../../components/openclaw_node"
     "../../../../components/common/settings"
     "../../../../components/common/time_sync"
     "../../components/app_config"
     "../../components/http_server"
-    "../../managed_components/espressif__esp_websocket_client"
 )
 
 if(NOT DEFINED IDF_TARGET)

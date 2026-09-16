@@ -1,0 +1,9 @@
+## IDF Component Manager Manifest File
+##
+## The transport needs the WebSocket client, and it is declared here rather than
+## borrowed from edge_agent's managed_components so that this app can be built on
+## its own - managed_components is not checked in, and CI removes it before
+## building, so reaching into a sibling project's copy would only work locally.
+dependencies:
+  espressif/esp_websocket_client:
+    version: "^1.8"
