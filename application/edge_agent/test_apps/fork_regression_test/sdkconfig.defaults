@@ -27,3 +27,8 @@ CONFIG_LWIP_NETIF_LOOPBACK=y
 
 CONFIG_ESP_TASK_WDT_EN=n
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# http_server_start() asks for 12 concurrent sockets and esp_http_server reserves
+# 3 more, so the lwIP default of 10 makes httpd_start() refuse with
+# ESP_ERR_INVALID_ARG. edge_agent's sdkconfig.defaults sets the same value.
+CONFIG_LWIP_MAX_SOCKETS=20
