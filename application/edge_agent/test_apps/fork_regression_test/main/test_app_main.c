@@ -25,6 +25,7 @@
  * WebSocket task that is stuck in a command answers none of them.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 
@@ -259,6 +260,12 @@ TEST_CASE("openclaw_node: repeated start/stop cycles do not leak", "[openclaw_no
 #define TEST_GW_PATH            "/ws"
 #define TEST_SLOW_ID            "inv-slow"
 #define TEST_FAST_ID            "inv-fast"
+#define TEST_SPLIT_ID           "inv-split"
+/* Comfortably past the 125-byte threshold, so the frame uses a 16-bit length and
+ * has enough body to be worth splitting. */
+#define TEST_SPLIT_FRAME_LEN    900
+/* Past the node's 24576-byte receive buffer, which is what makes it refuse. */
+#define TEST_OVERSIZED_FRAME_LEN 30000
 #define TEST_SLOW_COMMAND_MS    2500
 #define TEST_PING_INTERVAL_MS   200
 #define TEST_TEXT_MAX           2048
@@ -268,11 +275,14 @@ TEST_CASE("openclaw_node: repeated start/stop cycles do not leak", "[openclaw_no
 #define GW_CONNECT_BIT      BIT1
 #define GW_SLOW_REPLY_BIT   BIT2
 #define GW_FAST_REPLY_BIT   BIT3
+#define GW_SPLIT_REPLY_BIT  BIT4
 
 /* Which script the fake gateway plays. */
 typedef enum {
-    GW_MODE_QUEUE_ORDER,   /* a slow invoke with a fast one queued behind it */
-    GW_MODE_LONG_COMMAND,  /* one command that outlasts the drain window */
+    GW_MODE_QUEUE_ORDER,      /* a slow invoke with a fast one queued behind it */
+    GW_MODE_LONG_COMMAND,     /* one command that outlasts the drain window */
+    GW_MODE_SPLIT_FRAME,      /* one invoke whose frame is written in two pieces */
+    GW_MODE_OVERSIZED_FRAME,  /* a frame bigger than the node's receive buffer */
 } gw_mode_t;
 
 static gw_mode_t s_gw_mode;
@@ -283,6 +293,7 @@ typedef struct {
     char    reply_order[TEST_MAX_REPLIES][32];
     char    slow_reply[TEST_TEXT_MAX];
     char    fast_reply[TEST_TEXT_MAX];
+    char    split_reply[TEST_TEXT_MAX];
 } gw_stats_t;
 
 static gw_stats_t s_gw;
@@ -305,6 +316,9 @@ static void gw_record_reply(const char *id)
     } else if (strcmp(id, TEST_FAST_ID) == 0) {
         strlcpy(s_gw.fast_reply, s_gw_rx, sizeof(s_gw.fast_reply));
         xEventGroupSetBits(s_gw_events, GW_FAST_REPLY_BIT);
+    } else if (strcmp(id, TEST_SPLIT_ID) == 0) {
+        strlcpy(s_gw.split_reply, s_gw_rx, sizeof(s_gw.split_reply));
+        xEventGroupSetBits(s_gw_events, GW_SPLIT_REPLY_BIT);
     }
 }
 
@@ -387,12 +401,10 @@ static esp_err_t gw_send_invoke(const char *id, const char *command)
     return gw_send(HTTPD_WS_TYPE_TEXT, invoke, strlen(invoke));
 }
 
-/* Drives one scripted session: challenge, then a slow invoke with a fast one
- * right behind it, while pinging throughout. */
-static void fake_gateway_task(void *arg)
+/* Waits for the upgrade, sends the challenge, then waits for the node's connect
+ * request - which it only sends once it has the challenge. */
+static bool gw_complete_handshake(void)
 {
-    (void)arg;
-
     const char *challenge =
         "{\"type\":\"event\",\"event\":\"connect.challenge\","
         "\"payload\":{\"nonce\":\"test-nonce\",\"ts\":1700000000000}}";
@@ -400,19 +412,74 @@ static void fake_gateway_task(void *arg)
     if ((xEventGroupWaitBits(s_gw_events, GW_UPGRADED_BIT, pdFALSE, pdTRUE,
                              pdMS_TO_TICKS(5000)) & GW_UPGRADED_BIT) == 0) {
         ESP_LOGE(TAG, "fake gateway: no client connected in time");
-        goto done;
+        return false;
     }
-    /* The node only sends its connect request once it has the challenge. */
     if (gw_send(HTTPD_WS_TYPE_TEXT, challenge, strlen(challenge)) != ESP_OK) {
         ESP_LOGE(TAG, "fake gateway: challenge send failed");
-        goto done;
+        return false;
     }
     if ((xEventGroupWaitBits(s_gw_events, GW_CONNECT_BIT, pdFALSE, pdTRUE,
                              pdMS_TO_TICKS(5000)) & GW_CONNECT_BIT) == 0) {
         ESP_LOGE(TAG, "fake gateway: node never sent a connect request");
-        goto done;
+        return false;
     }
     ESP_LOGI(TAG, "fake gateway: node connected");
+    return true;
+}
+
+/* Writes one text frame by hand so it can be split across two send() calls.
+ * httpd_ws_send_frame_async always writes a whole frame, and splitting is the
+ * only way to make the client hand the node more than one event for a single
+ * frame. Server-to-client frames are unmasked, so the header is just the opcode
+ * and the length. */
+static bool gw_send_text_frame_split(const char *payload, size_t len,
+                                     size_t split_at, uint32_t gap_ms)
+{
+    if (s_gw_fd < 0 || len > 0xFFFF) {
+        return false;
+    }
+
+    uint8_t header[4];
+    size_t header_len;
+    header[0] = 0x81;                       /* FIN | text */
+    if (len <= 125) {
+        header[1] = (uint8_t)len;
+        header_len = 2;
+    } else {
+        header[1] = 126;                    /* 16-bit length follows */
+        header[2] = (uint8_t)(len >> 8);
+        header[3] = (uint8_t)(len & 0xFF);
+        header_len = 4;
+    }
+
+    if (send(s_gw_fd, header, header_len, 0) != (int)header_len) {
+        return false;
+    }
+    if (split_at > len) {
+        split_at = len;
+    }
+    if (split_at > 0 && send(s_gw_fd, payload, split_at, 0) != (int)split_at) {
+        return false;
+    }
+    if (gap_ms) {
+        vTaskDelay(pdMS_TO_TICKS(gap_ms));
+    }
+    const size_t rest = len - split_at;
+    if (rest > 0 && send(s_gw_fd, payload + split_at, rest, 0) != (int)rest) {
+        return false;
+    }
+    return true;
+}
+
+/* Drives one scripted session. */
+static void fake_gateway_task(void *arg)
+{
+    (void)arg;
+
+    if (!gw_complete_handshake()) {
+        vTaskDelete(NULL);
+        return;
+    }
 
     /* Measurement starts here: count pongs while the slow command runs, and put
      * the second request behind the first so the queue has to hold it. */
@@ -424,13 +491,72 @@ static void fake_gateway_task(void *arg)
          * the running command. */
         if (gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_LONG) != ESP_OK) {
             ESP_LOGE(TAG, "fake gateway: long invoke send failed");
-            goto done;
         }
         for (int i = 0; i < 100; i++) {
             gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
             vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
         }
-        goto done;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    if (s_gw_mode == GW_MODE_SPLIT_FRAME) {
+        /* One invoke whose frame is written in two pieces, so the client hands
+         * the node more than one event and the node has to stitch it back
+         * together. */
+        char *invoke = calloc(1, TEST_SPLIT_FRAME_LEN + 1);
+        if (!invoke) {
+            ESP_LOGE(TAG, "fake gateway: out of memory for the split frame");
+            vTaskDelete(NULL);
+            return;
+        }
+        snprintf(invoke, TEST_SPLIT_FRAME_LEN + 1,
+                 "{\"type\":\"event\",\"event\":\"node.invoke.request\","
+                 "\"payload\":{\"id\":\"%s\",\"command\":\"%s\",\"paramsJSON\":\"",
+                 TEST_SPLIT_ID, TEST_COMMAND_ECHO);
+        const size_t prefix = strlen(invoke);
+        const size_t body = TEST_SPLIT_FRAME_LEN - 3;   /* room for the closing "}} */
+        if (body > prefix) {
+            memset(invoke + prefix, 'p', body - prefix);
+        }
+        strlcat(invoke, "\"}}", TEST_SPLIT_FRAME_LEN + 1);
+
+        ESP_LOGI(TAG, "fake gateway: split frame of %u bytes", (unsigned)strlen(invoke));
+        gw_send_text_frame_split(invoke, strlen(invoke), strlen(invoke) / 2, 250);
+        free(invoke);
+
+        for (int i = 0; i < 100 && s_gw.reply_count == 0; i++) {
+            gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
+            vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
+        }
+        vTaskDelete(NULL);
+        return;
+    }
+
+    if (s_gw_mode == GW_MODE_OVERSIZED_FRAME) {
+        /* A frame bigger than the node's receive buffer must be dropped without
+         * disturbing the frames that follow it. */
+        const size_t oversized = TEST_OVERSIZED_FRAME_LEN;
+        char *big = malloc(oversized);
+        if (!big) {
+            ESP_LOGE(TAG, "fake gateway: out of memory for the oversized frame");
+            vTaskDelete(NULL);
+            return;
+        }
+        memset(big, 'x', oversized);
+        ESP_LOGI(TAG, "fake gateway: oversized frame of %u bytes", (unsigned)oversized);
+        gw_send(HTTPD_WS_TYPE_TEXT, big, oversized);
+        free(big);
+
+        vTaskDelay(pdMS_TO_TICKS(300));
+        gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_ECHO);
+
+        for (int i = 0; i < 100 && s_gw.reply_count == 0; i++) {
+            gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
+            vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
+        }
+        vTaskDelete(NULL);
+        return;
     }
 
     if (gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_SLEEP) != ESP_OK) {
@@ -831,6 +957,74 @@ TEST_CASE("openclaw_node: a wss:// endpoint starts a TLS handshake", "[openclaw_
                                          "nothing was written, so TLS was never started");
     TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x16, first_byte,
                                    "the first byte was not a TLS handshake record");
+}
+
+/* ── openclaw_node: frame reassembly and the oversized-frame guard ─────── */
+
+/* The node rebuilds a frame from the events the client hands it, matching
+ * payload_offset against its own byte count, and refuses anything that does not
+ * fit its buffer. Both paths are buffer-safety critical, so they get their own
+ * cases rather than being left to the round-trip tests above. */
+
+TEST_CASE("openclaw_node: a frame split across reads is reassembled", "[openclaw_node]")
+{
+    s_gw_mode = GW_MODE_SPLIT_FRAME;
+    start_fake_gateway();
+
+    char url[64];
+    snprintf(url, sizeof(url), "ws://127.0.0.1:%d%s", TEST_GW_PORT, TEST_GW_PATH);
+    openclaw_node_config_t config = make_node_config(url);
+
+    s_command_sleep_ms = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_start(&config));
+    TEST_ASSERT_EQUAL(pdPASS, xTaskCreate(fake_gateway_task, "fake_gw", 6144, NULL, 5, NULL));
+
+    const EventBits_t bits = xEventGroupWaitBits(s_gw_events, GW_SPLIT_REPLY_BIT, pdFALSE, pdTRUE,
+                                                 pdMS_TO_TICKS(12000));
+
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_stop());
+
+    TEST_ASSERT_TRUE_MESSAGE((bits & GW_SPLIT_REPLY_BIT) != 0,
+                             "the split frame was not reassembled into a usable request");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(s_gw.split_reply, TEST_SPLIT_ID),
+                                 "the reply did not carry the split request's id");
+
+    s_gw_mode = GW_MODE_QUEUE_ORDER;
+    stop_fake_gateway();
+}
+
+TEST_CASE("openclaw_node: an oversized frame is refused without wedging the connection",
+          "[openclaw_node]")
+{
+    s_gw_mode = GW_MODE_OVERSIZED_FRAME;
+    start_fake_gateway();
+
+    char url[64];
+    snprintf(url, sizeof(url), "ws://127.0.0.1:%d%s", TEST_GW_PORT, TEST_GW_PATH);
+    openclaw_node_config_t config = make_node_config(url);
+
+    s_command_sleep_ms = 0;
+    s_command_calls = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_start(&config));
+    TEST_ASSERT_EQUAL(pdPASS, xTaskCreate(fake_gateway_task, "fake_gw", 6144, NULL, 5, NULL));
+
+    /* The invoke that follows the oversized frame still has to be answered. If
+     * the guard had left the receive state wedged - a stale rx_length, say - it
+     * would never be parsed. */
+    const EventBits_t bits = xEventGroupWaitBits(s_gw_events, GW_SLOW_REPLY_BIT, pdFALSE, pdTRUE,
+                                                 pdMS_TO_TICKS(12000));
+
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_stop());
+
+    TEST_ASSERT_TRUE_MESSAGE((bits & GW_SLOW_REPLY_BIT) != 0,
+                             "the frame after the oversized one was never answered");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, s_command_calls,
+                                  "the command after the oversized frame did not run");
+
+    s_gw_mode = GW_MODE_QUEUE_ORDER;
+    stop_fake_gateway();
 }
 
 /* ── time_sync: waiting for a plausible clock ──────────────────────────── */
