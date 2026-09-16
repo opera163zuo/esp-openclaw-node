@@ -40,6 +40,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "http_server.h"
+#include "lwip/sockets.h"
 #include "nvs_flash.h"
 #include "openclaw_node.h"
 #include "unity.h"
@@ -627,6 +628,107 @@ TEST_CASE("http_server: ordinary deletes are not mistaken for the root", "[http_
     assert_delete_allowed("path=%2Fdir%2F.");          /* "dir/." is not the root */
 
     TEST_ASSERT_EQUAL(ESP_OK, http_server_stop());
+}
+
+/* ── openclaw_node: a wss:// endpoint must actually start TLS ──────────── */
+
+/* Without a CA source esp-tls refuses to build the TLS context at all - it logs
+ * "No server verification option set in esp_tls_cfg_t structure" and returns
+ * before the handshake - so nothing is ever written to the socket. With the
+ * certificate bundle attached the handshake starts and the first byte on the
+ * wire is a TLS handshake record (0x16). A plain TCP listener sees that
+ * difference without needing a certificate of its own.
+ *
+ * Note that a TCP connection is made in both cases: esp_tls connects the socket
+ * before it creates the TLS context, so "something connected" would not have
+ * been a decisive assertion. */
+
+#define TEST_TLS_PROBE_PORT 8092
+
+typedef struct {
+    volatile bool got_connection;
+    volatile int  bytes_read;
+    uint8_t       first_bytes[8];
+} tls_probe_t;
+
+static tls_probe_t s_probe;
+
+static void tls_probe_task(void *arg)
+{
+    (void)arg;
+
+    int listen_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listen_fd < 0) {
+        ESP_LOGE(TAG, "tls probe: socket failed");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    int opt = 1;
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    /* Bounded so the task cannot outlive the test when nothing connects. */
+    struct timeval accept_timeout = { .tv_sec = 15, .tv_usec = 0 };
+    setsockopt(listen_fd, SOL_SOCKET, SO_RCVTIMEO, &accept_timeout, sizeof(accept_timeout));
+
+    const struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_addr.s_addr = htonl(INADDR_ANY),
+        .sin_port = htons(TEST_TLS_PROBE_PORT),
+    };
+    if (bind(listen_fd, (const struct sockaddr *)&addr, sizeof(addr)) != 0 ||
+        listen(listen_fd, 1) != 0) {
+        ESP_LOGE(TAG, "tls probe: bind/listen failed");
+        close(listen_fd);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    int fd = accept(listen_fd, NULL, NULL);
+    if (fd >= 0) {
+        s_probe.got_connection = true;
+
+        struct timeval read_timeout = { .tv_sec = 3, .tv_usec = 0 };
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout));
+
+        int n = recv(fd, s_probe.first_bytes, sizeof(s_probe.first_bytes), 0);
+        if (n > 0) {
+            s_probe.bytes_read = n;
+        }
+        close(fd);
+    }
+    close(listen_fd);
+    vTaskDelete(NULL);
+}
+
+TEST_CASE("openclaw_node: a wss:// endpoint starts a TLS handshake", "[openclaw_node]")
+{
+    memset(&s_probe, 0, sizeof(s_probe));
+    TEST_ASSERT_EQUAL(pdPASS, xTaskCreate(tls_probe_task, "tls_probe", 4096, NULL, 5, NULL));
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    char url[64];
+    snprintf(url, sizeof(url), "wss://127.0.0.1:%d/ws", TEST_TLS_PROBE_PORT);
+    openclaw_node_config_t config = make_node_config(url);
+
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_start(&config));
+
+    for (int i = 0; i < 100 && s_probe.bytes_read == 0; i++) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_stop());
+
+    const int bytes_read = s_probe.bytes_read;
+    const uint8_t first_byte = s_probe.first_bytes[0];
+    ESP_LOGI(TAG, "tls probe: connected=%d bytes=%d first=0x%02x",
+             (int)s_probe.got_connection, bytes_read, first_byte);
+
+    TEST_ASSERT_TRUE_MESSAGE(s_probe.got_connection,
+                             "the node never reached the wss:// endpoint");
+    TEST_ASSERT_GREATER_THAN_INT_MESSAGE(0, bytes_read,
+                                         "nothing was written, so TLS was never started");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x16, first_byte,
+                                   "the first byte was not a TLS handshake record");
 }
 
 void setUp(void)
