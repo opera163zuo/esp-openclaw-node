@@ -9,6 +9,7 @@
 #include "openclaw_node.h"
 #include "esp_log.h"
 #include "esp_websocket_client.h"
+#include "esp_crt_bundle.h"
 #include "esp_event.h"
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
@@ -203,7 +204,6 @@ static esp_err_t send_connect(void)
     for (size_t i = 0; i < s_node.cfg.command_count; ++i) cJSON_AddItemToArray(commands, cJSON_CreateString(s_node.cfg.commands[i]));
     cJSON_AddObjectToObject(params, "permissions");
     if (s_node.cfg.gateway_token) { cJSON *auth = cJSON_AddObjectToObject(params, "auth"); cJSON_AddStringToObject(auth, "token", s_node.cfg.gateway_token); }
-    /* "locale" is already set above; adding it twice emits a duplicate JSON key. */
     cJSON_AddStringToObject(params, "userAgent", "esp-openclaw/0.1.0");
     cJSON_AddStringToObject(device, "id", s_node.cfg.device_id);
     cJSON_AddStringToObject(device, "publicKey", s_node.cfg.public_key_b64url);
@@ -350,10 +350,33 @@ esp_err_t openclaw_node_start(const openclaw_node_config_t *config)
         .buffer_size = RX_BUFFER_SIZE,
         .task_stack = 8192,
         .subprotocol = "openclaw",
+        /* A `wss://` endpoint is accepted by app_config_validate_openclaw, and
+         * esp-tls refuses to start a TLS session when no server verification
+         * option is set ("No server verification option set in esp_tls_cfg_t
+         * structure") unless CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY is enabled,
+         * which it is not. Attaching the certificate bundle is therefore what
+         * makes `wss://` work at all; plain `ws://` ignores it. */
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
-    s_node.ws = esp_websocket_client_init(&ws_cfg); if (!s_node.ws) return ESP_ERR_NO_MEM;
-    esp_websocket_register_events(s_node.ws, WEBSOCKET_EVENT_ANY, websocket_handler, NULL);
-    return esp_websocket_client_start(s_node.ws);
+    s_node.ws = esp_websocket_client_init(&ws_cfg);
+    if (!s_node.ws) return ESP_ERR_NO_MEM;
+    esp_err_t reg_err = esp_websocket_register_events(s_node.ws, WEBSOCKET_EVENT_ANY,
+                                                      websocket_handler, NULL);
+    if (reg_err != ESP_OK) {
+        /* Without a handler the node would start and never see the Gateway
+         * challenge, so fail loudly instead of connecting into the void. */
+        esp_websocket_client_destroy(s_node.ws);
+        memset(&s_node, 0, sizeof(s_node));
+        return reg_err;
+    }
+    esp_err_t start_err = esp_websocket_client_start(s_node.ws);
+    if (start_err != ESP_OK) {
+        /* Leave no half-started handle behind: a later start() would otherwise
+         * be rejected by the s_node.ws guard at the top of this function. */
+        esp_websocket_client_destroy(s_node.ws);
+        memset(&s_node, 0, sizeof(s_node));
+    }
+    return start_err;
 }
 
 esp_err_t openclaw_node_stop(void)

@@ -375,7 +375,6 @@ esp_err_t openclaw_node_device_command(const char *command,
                                        size_t result_size,
                                        void *user_ctx)
 {
-    (void)params_json;
     (void)user_ctx;
     if (!command || !result_json || result_size == 0) return ESP_ERR_INVALID_ARG;
     if (strcmp(command, OPENCLAW_NODE_DEVICE_COMMAND_INFO) == 0) return write_info(result_json, result_size);

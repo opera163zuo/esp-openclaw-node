@@ -58,8 +58,11 @@ static void app_free_runtime_state(void)
     free(s_claw_config);
     s_claw_config = NULL;
 
-    free(s_config);
-    s_config = NULL;
+    /* s_config is deliberately kept allocated for the lifetime of the process.
+     * The portal save path (main_save_config) writes the newly accepted values
+     * back into it and restarts the Native Node so a Gateway change takes
+     * effect without a reflash. Freeing it here would turn that branch into
+     * dead code and silently require a reboot instead. */
 }
 
 /* The provisioning AP is WPA2 when `ap_password` is set and completely open
@@ -158,13 +161,26 @@ static esp_err_t main_save_config(const app_config_t *config)
         ESP_LOGW(TAG, "Failed to update runtime config: %s", esp_err_to_name(err));
     }
 
-    /* The Native Node stores pointers to the app config. Copy the new values
-     * before restarting the WebSocket client so Gateway changes take effect
-     * immediately, without rebuilding or reflashing the firmware. */
+    /* The Native Node holds its own copies of the strings it was handed, but the
+     * Gateway settings themselves live in s_config. Write the accepted values
+     * back and bounce the WebSocket client so a Gateway change takes effect
+     * without rebuilding or reflashing the firmware. Only the OpenClaw fields
+     * are compared: saving Wi-Fi, capability, or Lua settings must not tear down
+     * a healthy Gateway session. */
     if (s_config) {
+        bool gateway_changed =
+            strcmp(s_config->openclaw_gateway_url, config->openclaw_gateway_url) != 0 ||
+            strcmp(s_config->openclaw_gateway_token, config->openclaw_gateway_token) != 0 ||
+            strcmp(s_config->openclaw_device_family, config->openclaw_device_family) != 0;
+
         *s_config = *config;
-        openclaw_node_stop();
-        start_openclaw_node_if_configured(s_config);
+
+        if (gateway_changed) {
+            /* stop() waits for the WebSocket task to exit, so the state reset it
+             * performs cannot race the event handler. */
+            openclaw_node_stop();
+            start_openclaw_node_if_configured(s_config);
+        }
     }
     return ESP_OK;
 }

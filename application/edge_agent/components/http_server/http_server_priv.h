@@ -28,6 +28,16 @@ http_server_ctx_t *http_server_ctx(void);
 
 char *http_server_alloc_scratch_buffer(void);
 bool http_server_path_is_safe(const char *path);
+/**
+ * @brief True when @p path denotes the storage root itself.
+ *
+ * Matches every spelling the VFS would resolve to the base directory: "/",
+ * "//", "/.", "/./" and similar runs of slashes and dots. The delete handler
+ * refuses these, because a recursive delete of the root removes every user file
+ * and then the mount point. A path that names a real child ("/./foo", "/foo")
+ * is not matched.
+ */
+bool http_server_path_is_storage_root(const char *path);
 void http_server_url_decode_inplace(char *value);
 esp_err_t http_server_query_get(httpd_req_t *req, const char *key, char *value, size_t value_size);
 

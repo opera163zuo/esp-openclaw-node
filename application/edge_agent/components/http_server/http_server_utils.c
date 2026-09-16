@@ -82,6 +82,38 @@ bool http_server_path_is_safe(const char *path)
     return path && path[0] == '/' && strstr(path, "..") == NULL;
 }
 
+/* The delete handler must not accept a path that resolves to the storage root.
+ * http_server_path_is_safe() deliberately allows "/" because list_dir and the
+ * WebUI need to read the root, so the check lives here instead of there.
+ *
+ * Comparing against "/" alone is not enough: "/.", "/./" and "//" all resolve
+ * to the same directory on the VFS, and a recursive delete of any of them
+ * removes every user file before failing to remove the mount point itself. A
+ * path is the root only when every segment is empty or ".", which no real entry
+ * name can be. A ".." segment is the root's parent, not the root, so it does
+ * not match here - the caller rejects traversal separately. */
+bool http_server_path_is_storage_root(const char *path)
+{
+    if (!path || path[0] != '/') {
+        return false;
+    }
+
+    const char *segment = path + 1;
+    while (*segment) {
+        const char *slash = strchr(segment, '/');
+        size_t segment_len = slash ? (size_t)(slash - segment) : strlen(segment);
+
+        if (segment_len != 0 && !(segment_len == 1 && segment[0] == '.')) {
+            return false;
+        }
+        if (!slash) {
+            break;
+        }
+        segment = slash + 1;
+    }
+    return true;
+}
+
 void http_server_url_decode_inplace(char *value)
 {
     if (!value) {

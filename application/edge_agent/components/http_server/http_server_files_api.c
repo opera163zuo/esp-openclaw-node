@@ -265,6 +265,13 @@ static esp_err_t files_delete_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing path");
     }
 
+    /* Refuse to delete the storage root. With recursive=1 this would remove
+     * every user file and then the mount point, and the loss is irreversible. */
+    if (http_server_path_is_storage_root(relative_path)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   "Cannot delete the storage root");
+    }
+
     char recursive_str[8] = {0};
     http_server_query_get(req, "recursive", recursive_str, sizeof(recursive_str));
     bool recursive = (strcmp(recursive_str, "1") == 0 || strcmp(recursive_str, "true") == 0);
