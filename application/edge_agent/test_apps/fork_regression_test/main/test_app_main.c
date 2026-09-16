@@ -36,6 +36,7 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
@@ -130,11 +131,18 @@ TEST_CASE("app_config: a loaded copy cannot mutate the store", "[app_config]")
 
 #define TEST_COMMAND_ECHO  "test.echo"
 #define TEST_COMMAND_SLEEP "test.sleep"
+/* Used by the drain-window test. It keeps its own counter so a worker left
+ * running past stop() cannot disturb the other cases. */
+#define TEST_COMMAND_LONG  "test.long"
 
-static const char *s_test_commands[] = { TEST_COMMAND_ECHO, TEST_COMMAND_SLEEP };
+static const char *s_test_commands[] = {
+    TEST_COMMAND_ECHO, TEST_COMMAND_SLEEP, TEST_COMMAND_LONG,
+};
 
 static volatile int32_t s_command_sleep_ms;
 static volatile int     s_command_calls;
+static volatile int     s_long_command_started;
+static volatile int     s_long_command_finished;
 
 static esp_err_t test_sign_cb(const char *payload, char *signature_out,
                               size_t signature_size, void *user_ctx)
@@ -153,6 +161,14 @@ static esp_err_t test_command_cb(const char *command, const char *params_json,
 {
     (void)params_json;
     (void)user_ctx;
+
+    if (strcmp(command, TEST_COMMAND_LONG) == 0) {
+        s_long_command_started = 1;
+        vTaskDelay(pdMS_TO_TICKS((uint32_t)s_command_sleep_ms));
+        s_long_command_finished = 1;
+        snprintf(result_json, result_size, "{\"ran\":\"%s\"}", command);
+        return ESP_OK;
+    }
 
     s_command_calls++;
     if (strcmp(command, TEST_COMMAND_SLEEP) == 0) {
@@ -250,6 +266,14 @@ TEST_CASE("openclaw_node: repeated start/stop cycles do not leak", "[openclaw_no
 #define GW_CONNECT_BIT      BIT1
 #define GW_SLOW_REPLY_BIT   BIT2
 #define GW_FAST_REPLY_BIT   BIT3
+
+/* Which script the fake gateway plays. */
+typedef enum {
+    GW_MODE_QUEUE_ORDER,   /* a slow invoke with a fast one queued behind it */
+    GW_MODE_LONG_COMMAND,  /* one command that outlasts the drain window */
+} gw_mode_t;
+
+static gw_mode_t s_gw_mode;
 
 typedef struct {
     int     pong_count;                 /* pongs seen since the reset */
@@ -391,6 +415,22 @@ static void fake_gateway_task(void *arg)
     /* Measurement starts here: count pongs while the slow command runs, and put
      * the second request behind the first so the queue has to hold it. */
     s_gw.pong_count = 0;
+
+    if (s_gw_mode == GW_MODE_LONG_COMMAND) {
+        /* One command that outlasts the node's drain window. Keep the connection
+         * pinging so it stays healthy while the test stops the node underneath
+         * the running command. */
+        if (gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_LONG) != ESP_OK) {
+            ESP_LOGE(TAG, "fake gateway: long invoke send failed");
+            goto done;
+        }
+        for (int i = 0; i < 100; i++) {
+            gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
+            vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
+        }
+        goto done;
+    }
+
     if (gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_SLEEP) != ESP_OK) {
         ESP_LOGE(TAG, "fake gateway: slow invoke send failed");
         goto done;
@@ -461,6 +501,7 @@ static void stop_fake_gateway(void)
  * throughout, and both replies come back in the order the requests arrived. */
 TEST_CASE("openclaw_node: a slow command does not stall the socket", "[openclaw_node]")
 {
+    s_gw_mode = GW_MODE_QUEUE_ORDER;
     start_fake_gateway();
 
     char url[64];
@@ -630,8 +671,67 @@ TEST_CASE("http_server: ordinary deletes are not mistaken for the root", "[http_
     TEST_ASSERT_EQUAL(ESP_OK, http_server_stop());
 }
 
-/* ── openclaw_node: a wss:// endpoint must actually start TLS ──────────── */
+/* The hardest path in the worker teardown: a command that outlasts
+ * NODE_CMD_DRAIN_WAIT_MS. stop() must give up on it rather than wait it out, and
+ * it must not free the worker context underneath a worker that is still running
+ * - it deliberately leaks it instead. So this asserts liveness, not heap
+ * stability. The command keeps running to completion afterwards and its reply is
+ * dropped, because s_cmd_worker no longer points at that worker. */
+TEST_CASE("openclaw_node: stop() gives up on a command that outlasts the drain window",
+          "[openclaw_node]")
+{
+    /* Comfortably longer than the node's own drain and exit windows (5 s each),
+     * so both time out and the leak path is the one exercised. */
+    enum { LONG_COMMAND_MS = 20000 };
+    enum { DRAIN_WAIT_MS = 5000 };
+    enum { EXIT_WAIT_MS = 5000 };
 
+    s_gw_mode = GW_MODE_LONG_COMMAND;
+    start_fake_gateway();
+
+    char url[64];
+    snprintf(url, sizeof(url), "ws://127.0.0.1:%d%s", TEST_GW_PORT, TEST_GW_PATH);
+    openclaw_node_config_t config = make_node_config(url);
+
+    s_command_sleep_ms = LONG_COMMAND_MS;
+    s_long_command_started = 0;
+    s_long_command_finished = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_start(&config));
+    TEST_ASSERT_EQUAL(pdPASS, xTaskCreate(fake_gateway_task, "fake_gw", 6144, NULL, 5, NULL));
+
+    for (int i = 0; i < 100 && !s_long_command_started; i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    TEST_ASSERT_TRUE_MESSAGE(s_long_command_started, "the long command never started");
+
+    const int64_t started_us = esp_timer_get_time();
+    TEST_ASSERT_EQUAL(ESP_OK, openclaw_node_stop());
+    const int elapsed_ms = (int)((esp_timer_get_time() - started_us) / 1000);
+
+    ESP_LOGI(TAG, "stop() returned after %d ms with a %d ms command in flight",
+             elapsed_ms, LONG_COMMAND_MS);
+
+    /* It waited its drain window before giving up... */
+    TEST_ASSERT_GREATER_THAN_INT_MESSAGE(DRAIN_WAIT_MS - 1500, elapsed_ms,
+                                         "stop() gave up before its drain window elapsed");
+    /* ...but it did not wait the command out. */
+    TEST_ASSERT_LESS_THAN_INT_MESSAGE(LONG_COMMAND_MS - 1500, elapsed_ms,
+                                      "stop() waited for the running command");
+
+    /* The worker is left to finish on its own; the command is not abandoned
+     * half-way, it simply has nobody left to answer. */
+    for (int i = 0; i < 200 && !s_long_command_finished; i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    TEST_ASSERT_TRUE_MESSAGE(s_long_command_finished,
+                             "the command never ran to completion after stop()");
+
+    s_gw_mode = GW_MODE_QUEUE_ORDER;
+    stop_fake_gateway();
+}
+
+/* ── openclaw_node: a wss:// endpoint must actually start TLS ──────────── */
 /* Without a CA source esp-tls refuses to build the TLS context at all - it logs
  * "No server verification option set in esp_tls_cfg_t structure" and returns
  * before the handshake - so nothing is ever written to the socket. With the
