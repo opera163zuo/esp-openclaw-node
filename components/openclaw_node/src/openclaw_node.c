@@ -14,6 +14,8 @@
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "esp_timer.h"
 #include "esp_check.h"
 #include <stdio.h>
@@ -33,6 +35,39 @@
 #define NODE_VERSION_MAX 32
 #define NODE_PLATFORM_MAX 32
 #define NODE_DEVICE_FAMILY_MAX 64
+
+/* Gateway commands run on their own task. The WebSocket event handler must
+ * return promptly because it owns the receive loop and the keepalive, and a
+ * command such as lua.run can legitimately take up to a minute (see
+ * CAP_LUA_SYNC_DEFAULT_TIMEOUT_MS). Running it inline stalls the socket until
+ * the Gateway gives up on the node. */
+#define NODE_CMD_QUEUE_DEPTH   4
+#define NODE_CMD_TASK_STACK    8192
+#define NODE_CMD_RESULT_MAX    2048
+#define NODE_CMD_TASK_PRIO     5
+/* stop() waits this long for a command in flight before giving up on it. */
+#define NODE_CMD_DRAIN_WAIT_MS 5000
+/* stop() then waits this long for the worker task to actually exit. */
+#define NODE_CMD_EXIT_WAIT_MS  5000
+
+typedef struct {
+    char *id;
+    char *command;
+    char *params;
+} node_cmd_job_t;
+
+/* One of these per start(). It is deliberately not part of node_state_t:
+ * openclaw_node_stop() resets that struct, and a worker that is still finishing
+ * a command must keep using its own queue and its own stop flag rather than
+ * whatever a later start() installed. */
+typedef struct {
+    QueueHandle_t queue;
+    SemaphoreHandle_t idle;   /* taken while a command runs */
+    openclaw_node_command_cb_t command_cb;
+    void *user_ctx;
+    volatile bool stopping;   /* set by stop(): run nothing further */
+    volatile bool exited;     /* set by the worker just before it deletes itself */
+} node_cmd_worker_t;
 
 static int utf8_invalid_offset(const char *data, size_t len)
 {
@@ -75,6 +110,18 @@ typedef struct {
 } node_state_t;
 
 static node_state_t s_node;
+
+/* The worker that is currently allowed to reply, or NULL between stop() and the
+ * next start(). A worker that is still draining a long command compares itself
+ * against this before answering, so it cannot write to a torn-down client. */
+static node_cmd_worker_t *s_cmd_worker;
+
+/* Makes "clear s_cmd_worker and destroy the WebSocket client" atomic with
+ * respect to a reply that is already in flight. Created by start() and never
+ * deleted, because a worker that outlives stop() still has to take it. Only the
+ * command worker takes it - never the WebSocket task, which esp_websocket_
+ * client_destroy() joins and would therefore deadlock against. */
+static SemaphoreHandle_t s_reply_lock;
 
 static bool command_declared(const char *command)
 {
@@ -162,6 +209,117 @@ static esp_err_t send_invoke_result(const char *id, bool ok,
     return err;
 }
 
+static void node_cmd_job_free(node_cmd_job_t *job)
+{
+    if (!job) return;
+    free(job->id);
+    free(job->command);
+    free(job->params);
+    free(job);
+}
+
+/* Releases a worker context that has no task attached to it. */
+static void node_cmd_worker_free(node_cmd_worker_t *worker)
+{
+    if (!worker) return;
+    if (worker->queue) vQueueDelete(worker->queue);
+    if (worker->idle) vSemaphoreDelete(worker->idle);
+    free(worker);
+}
+
+/* Runs Gateway commands off the WebSocket task. Replies carry the request id, so
+ * answering out of order is fine. */
+static void node_cmd_task(void *arg)
+{
+    node_cmd_worker_t *worker = arg;
+    node_cmd_job_t *job = NULL;
+
+    while (xQueueReceive(worker->queue, &job, portMAX_DELAY) == pdTRUE) {
+        /* A NULL job is the shutdown sentinel posted by stop(). It has to end
+         * the loop: receiving with portMAX_DELAY never returns otherwise, so
+         * the task would never exit and stop() would wait for it forever. */
+        if (!job) {
+            break;
+        }
+        /* A job that arrives after stop() began is dropped rather than run. */
+        if (worker->stopping) {
+            node_cmd_job_free(job);
+            job = NULL;
+            continue;
+        }
+
+        xSemaphoreTake(worker->idle, portMAX_DELAY);
+        char result[NODE_CMD_RESULT_MAX] = "{}";
+        esp_err_t err = worker->command_cb(job->command, job->params,
+                                           result, sizeof(result), worker->user_ctx);
+        /* Name the specific reason, not just "it failed". */
+        char message[96];
+        snprintf(message, sizeof(message), "%s (%s)",
+                 describe_command_error(err), esp_err_to_name(err));
+        if (err != ESP_OK) {
+            /* Mirror it to the serial log: the Gateway only sees the reply, so
+               a headless retry would otherwise be silent. */
+            ESP_LOGW(TAG, "Command '%s' rejected: %s", job->command, message);
+        }
+
+        /* stop() may have torn the client down while this command was running.
+         * The lock makes the check-and-send atomic against that teardown. */
+        if (s_reply_lock && xSemaphoreTake(s_reply_lock, portMAX_DELAY) == pdTRUE) {
+            if (s_cmd_worker == worker) {
+                send_invoke_result(job->id, err == ESP_OK, result, message);
+            } else {
+                ESP_LOGW(TAG, "Command '%s' finished after stop(); reply dropped",
+                         job->command);
+            }
+            xSemaphoreGive(s_reply_lock);
+        }
+        xSemaphoreGive(worker->idle);
+
+        node_cmd_job_free(job);
+        job = NULL;
+    }
+
+    /* Tells stop() it may free the context. Nothing below may touch it. */
+    worker->exited = true;
+    vTaskDelete(NULL);
+}
+
+/* Queue a Gateway invoke request. Runs on the WebSocket task, so it must not
+ * block: a full queue is answered immediately instead of waiting. */
+static void node_cmd_dispatch(cJSON *id, cJSON *command, cJSON *params)
+{
+    const char *id_text = cJSON_IsString(id) ? id->valuestring : NULL;
+    node_cmd_worker_t *worker = s_cmd_worker;
+
+    if (!id_text || !cJSON_IsString(command) ||
+        !command_declared(command->valuestring)) {
+        send_invoke_result(id_text ? id_text : "invoke", false, NULL, "command not allowed");
+        return;
+    }
+    if (!worker || worker->stopping) {
+        /* Between stop() and the next start() there is nowhere to run this. */
+        send_invoke_result(id_text, false, NULL, "device not ready");
+        return;
+    }
+
+    node_cmd_job_t *job = calloc(1, sizeof(*job));
+    if (job) {
+        job->id      = strdup(id_text);
+        job->command = strdup(command->valuestring);
+        job->params  = strdup(cJSON_IsString(params) ? params->valuestring : "{}");
+    }
+    if (!job || !job->id || !job->command || !job->params) {
+        node_cmd_job_free(job);
+        send_invoke_result(id_text, false, NULL, "out of memory");
+        return;
+    }
+    if (xQueueSend(worker->queue, &job, 0) != pdTRUE) {
+        /* Backlog full: say so now rather than let the keepalive time out. */
+        send_invoke_result(job->id, false, NULL, "device busy");
+        node_cmd_job_free(job);
+    }
+}
+
 static esp_err_t send_connect(void)
 {
     if (!s_node.challenged || !s_node.cfg.sign_cb) return ESP_ERR_INVALID_STATE;
@@ -245,24 +403,12 @@ static void handle_frame(const char *data, size_t len)
                 strlcpy(s_node.nonce, nonce->valuestring, sizeof(s_node.nonce)); s_node.challenge_ts = (uint64_t)ts->valuedouble; s_node.challenged = true; send_connect();
             } else ESP_LOGE(TAG, "Invalid Gateway challenge payload");
         } else if (cJSON_IsString(event) && strcmp(event->valuestring, "node.invoke.request") == 0 && payload) {
-            cJSON *id = cJSON_GetObjectItem(payload, "id"); cJSON *command = cJSON_GetObjectItem(payload, "command"); cJSON *params = cJSON_GetObjectItem(payload, "paramsJSON");
-            char result[2048] = "{}";
-            if (!cJSON_IsString(id) || !cJSON_IsString(command) || !command_declared(command->valuestring) || !s_node.cfg.command_cb) { send_invoke_result(cJSON_IsString(id) ? id->valuestring : "invoke", false, NULL, "command not allowed"); }
-            else {
-                esp_err_t err = s_node.cfg.command_cb(command->valuestring,
-                                                      cJSON_IsString(params) ? params->valuestring : "{}",
-                                                      result, sizeof(result), s_node.cfg.user_ctx);
-                /* Name the specific reason, not just "it failed". */
-                char message[96];
-                snprintf(message, sizeof(message), "%s (%s)",
-                         describe_command_error(err), esp_err_to_name(err));
-                if (err != ESP_OK) {
-                    /* Mirror it to the serial log: the Gateway only sees the
-                       reply, so a headless retry would otherwise be silent. */
-                    ESP_LOGW(TAG, "Command '%s' rejected: %s", command->valuestring, message);
-                }
-                send_invoke_result(id->valuestring, err == ESP_OK, result, message);
-            }
+            /* Hand the work to the command worker: running it here would stall
+             * this task - and with it the receive loop and the keepalive - for
+             * as long as the command takes. */
+            node_cmd_dispatch(cJSON_GetObjectItem(payload, "id"),
+                              cJSON_GetObjectItem(payload, "command"),
+                              cJSON_GetObjectItem(payload, "paramsJSON"));
         }
     } else if (cJSON_IsString(type) && strcmp(type->valuestring, "res") == 0) {
         cJSON *payload = cJSON_GetObjectItem(root, "payload");
@@ -375,14 +521,101 @@ esp_err_t openclaw_node_start(const openclaw_node_config_t *config)
          * be rejected by the s_node.ws guard at the top of this function. */
         esp_websocket_client_destroy(s_node.ws);
         memset(&s_node, 0, sizeof(s_node));
+        return start_err;
     }
-    return start_err;
+
+    /* Created once and kept for the lifetime of the process: a worker that
+     * outlives stop() must still be able to take it. */
+    if (!s_reply_lock) {
+        s_reply_lock = xSemaphoreCreateMutex();
+    }
+    if (!s_reply_lock) {
+        ESP_LOGE(TAG, "Failed to create the reply lock");
+        esp_websocket_client_destroy(s_node.ws);
+        memset(&s_node, 0, sizeof(s_node));
+        return ESP_ERR_NO_MEM;
+    }
+
+    node_cmd_worker_t *worker = calloc(1, sizeof(*worker));
+    if (worker) {
+        worker->command_cb = config->command_cb;
+        worker->user_ctx = config->user_ctx;
+        worker->queue = xQueueCreate(NODE_CMD_QUEUE_DEPTH, sizeof(node_cmd_job_t *));
+        worker->idle = xSemaphoreCreateBinary();
+    }
+    if (!worker || !worker->queue || !worker->idle) {
+        ESP_LOGE(TAG, "Failed to allocate the command worker");
+        node_cmd_worker_free(worker);
+        esp_websocket_client_destroy(s_node.ws);
+        memset(&s_node, 0, sizeof(s_node));
+        return ESP_ERR_NO_MEM;
+    }
+    xSemaphoreGive(worker->idle);   /* idle: no command running yet */
+
+    if (xTaskCreate(node_cmd_task, "oc_cmd", NODE_CMD_TASK_STACK, worker,
+                    NODE_CMD_TASK_PRIO, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to start the command worker");
+        node_cmd_worker_free(worker);
+        esp_websocket_client_destroy(s_node.ws);
+        memset(&s_node, 0, sizeof(s_node));
+        return ESP_ERR_NO_MEM;
+    }
+
+    s_cmd_worker = worker;
+    return ESP_OK;
 }
 
 esp_err_t openclaw_node_stop(void)
 {
-    if (!s_node.ws) return ESP_OK;
-    esp_websocket_client_stop(s_node.ws); esp_websocket_client_destroy(s_node.ws); memset(&s_node, 0, sizeof(s_node)); return ESP_OK;
+    node_cmd_worker_t *worker = s_cmd_worker;
+
+    if (worker) {
+        worker->stopping = true;
+
+        /* Wait for a command in flight. The worker is never deleted while it is
+         * inside command_cb: that would tear the Lua VM down mid-run. */
+        if (xSemaphoreTake(worker->idle, pdMS_TO_TICKS(NODE_CMD_DRAIN_WAIT_MS)) == pdTRUE) {
+            xSemaphoreGive(worker->idle);
+        } else {
+            ESP_LOGW(TAG, "A command is still running; letting the worker finish it");
+        }
+
+        node_cmd_job_t *job = NULL;
+        while (xQueueReceive(worker->queue, &job, 0) == pdTRUE) {
+            node_cmd_job_free(job);
+        }
+        node_cmd_job_t *sentinel = NULL;   /* wakes the blocked receive */
+        xQueueSend(worker->queue, &sentinel, 0);
+    }
+
+    /* Clearing the active worker and destroying the client under the reply lock
+     * keeps a reply that is already in flight from writing to a freed handle. */
+    bool locked = (s_reply_lock != NULL) &&
+                  (xSemaphoreTake(s_reply_lock, portMAX_DELAY) == pdTRUE);
+    s_cmd_worker = NULL;
+    if (s_node.ws) {
+        esp_websocket_client_stop(s_node.ws);
+        esp_websocket_client_destroy(s_node.ws);
+        memset(&s_node, 0, sizeof(s_node));
+    }
+    if (locked) {
+        xSemaphoreGive(s_reply_lock);
+    }
+
+    if (worker) {
+        TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(NODE_CMD_EXIT_WAIT_MS);
+        while (!worker->exited && xTaskGetTickCount() < deadline) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        if (worker->exited) {
+            node_cmd_worker_free(worker);
+        } else {
+            /* Freeing the queue under a worker that has not exited would leave
+             * it receiving from freed memory, so leak the context instead. */
+            ESP_LOGW(TAG, "Command worker did not exit; leaking its context to stay safe");
+        }
+    }
+    return ESP_OK;
 }
 
 bool openclaw_node_is_connected(void) { return s_node.connected; }
