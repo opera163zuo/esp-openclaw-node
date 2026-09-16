@@ -28,6 +28,7 @@
 #include "openclaw_node.h"
 #include "freertos/task.h"
 #include "app_config.h"
+#include "time_sync.h"
 
 #define APP_ENABLE_MEM_LOG        (0)
 
@@ -223,12 +224,43 @@ static esp_err_t openclaw_node_sign_cb(const char *payload,
     return openclaw_node_identity_sign_b64url(payload, signature_out, signature_size);
 }
 
+/* A `wss://` handshake validates the Gateway certificate against the wall
+ * clock, and SNTP runs on its own task. Without this the first attempt can be
+ * thrown away on a 1970 timestamp. The wait is deliberately short because this
+ * runs on the portal task too (a Gateway change saved from the WebUI); anything
+ * left over is covered by the WebSocket client's own reconnect loop. */
+#define OPENCLAW_WSS_CLOCK_WAIT_MS 5000
+
+static void wait_for_plausible_clock(void)
+{
+    if (time_sync_is_valid()) {
+        return;
+    }
+
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(OPENCLAW_WSS_CLOCK_WAIT_MS);
+    while (!time_sync_is_valid() && xTaskGetTickCount() < deadline) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (!time_sync_is_valid()) {
+        ESP_LOGW(TAG, "Clock still unset after %d ms; the first wss:// handshake will fail "
+                      "until SNTP completes", OPENCLAW_WSS_CLOCK_WAIT_MS);
+    }
+}
+
 static void start_openclaw_node_if_configured(const app_config_t *app_config)
 {
     if (!app_config || app_config->openclaw_gateway_url[0] == '\0') {
         ESP_LOGI(TAG, "OpenClaw Native Node disabled: no Gateway URL configured");
         return;
     }
+
+    /* Only TLS checks the certificate dates, so a plain ws:// endpoint has no
+     * reason to wait for the clock. */
+    if (strncmp(app_config->openclaw_gateway_url, "wss://", 6) == 0) {
+        wait_for_plausible_clock();
+    }
+
     size_t command_count = 0;
     const char *const *commands = openclaw_node_device_commands(&command_count);
     /* The Native Node task uses these strings after this function returns. */

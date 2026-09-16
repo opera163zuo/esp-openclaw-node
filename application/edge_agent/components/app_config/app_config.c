@@ -9,7 +9,13 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "esp_check.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "settings_store.h"
+
+static const char *TAG = "app_config";
 
 typedef struct {
     const char *key;
@@ -51,6 +57,18 @@ static inline const char *app_config_field_cptr(const app_config_t *config, cons
     return (const char *)config + field->offset;
 }
 
+/* The portal's auth check loads the config on every API request, and a full
+ * read walks all of NVS. Keep one in-memory copy instead.
+ *
+ * This cannot go stale: settings_store_get_string/set_string are used nowhere
+ * else, so app_config_load() and app_config_save() are the only gateways to
+ * this namespace and both keep the cache in step. The lock covers the struct
+ * copy, because the portal and the CLI task can call in at the same time; it is
+ * created in app_config_init() so that no caller has to race to lazily make it. */
+static app_config_t s_cache;
+static bool s_cache_valid;
+static SemaphoreHandle_t s_cache_lock;
+
 static bool app_config_ap_behavior_is_valid(const char *ap_behavior)
 {
     return !ap_behavior || ap_behavior[0] == '\0' ||
@@ -65,6 +83,11 @@ esp_err_t app_config_init(void)
     });
     if (err != ESP_OK) {
         return err;
+    }
+
+    s_cache_lock = xSemaphoreCreateMutex();
+    if (!s_cache_lock) {
+        return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
 }
@@ -84,12 +107,8 @@ void app_config_load_defaults(app_config_t *config)
     }
 }
 
-esp_err_t app_config_load(app_config_t *config)
+static esp_err_t app_config_read_nvs(app_config_t *config)
 {
-    if (!config) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     app_config_load_defaults(config);
 
     for (size_t i = 0; i < sizeof(s_fields) / sizeof(s_fields[0]); ++i) {
@@ -105,12 +124,8 @@ esp_err_t app_config_load(app_config_t *config)
     return ESP_OK;
 }
 
-esp_err_t app_config_save(const app_config_t *config)
+static esp_err_t app_config_write_nvs(const app_config_t *config)
 {
-    if (!config) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     for (size_t i = 0; i < sizeof(s_fields) / sizeof(s_fields[0]); ++i) {
         esp_err_t err = settings_store_set_string(s_fields[i].key,
                                                   app_config_field_cptr(config, &s_fields[i]));
@@ -120,6 +135,55 @@ esp_err_t app_config_save(const app_config_t *config)
     }
 
     return settings_store_commit();
+}
+
+esp_err_t app_config_load(app_config_t *config)
+{
+    if (!config) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ESP_RETURN_ON_FALSE(s_cache_lock, ESP_ERR_INVALID_STATE, TAG,
+                        "app_config_init() was not called");
+
+    xSemaphoreTake(s_cache_lock, portMAX_DELAY);
+
+    esp_err_t err = ESP_OK;
+    if (!s_cache_valid) {
+        /* Read while holding the lock so two concurrent first loads cannot both
+         * walk NVS. Only happens once; later calls hit the cache. */
+        err = app_config_read_nvs(&s_cache);
+        if (err == ESP_OK) {
+            s_cache_valid = true;
+        }
+    }
+    if (err == ESP_OK) {
+        *config = s_cache;
+    }
+
+    xSemaphoreGive(s_cache_lock);
+    return err;
+}
+
+esp_err_t app_config_save(const app_config_t *config)
+{
+    if (!config) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = app_config_write_nvs(config);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* Refresh the cache, otherwise the next load would hand back the values
+     * from before this save. */
+    ESP_RETURN_ON_FALSE(s_cache_lock, ESP_ERR_INVALID_STATE, TAG,
+                        "app_config_init() was not called");
+    xSemaphoreTake(s_cache_lock, portMAX_DELAY);
+    s_cache = *config;
+    s_cache_valid = true;
+    xSemaphoreGive(s_cache_lock);
+    return ESP_OK;
 }
 
 esp_err_t app_config_validate_wifi(const app_config_t *config, const char **message)
