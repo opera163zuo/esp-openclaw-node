@@ -27,6 +27,7 @@
 #include "openclaw_node_device.h"
 #include "openclaw_node.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "app_config.h"
 #include "time_sync.h"
 
@@ -36,6 +37,16 @@ static const char *TAG = "app";
 
 static app_config_t *s_config;
 static app_claw_config_t *s_claw_config;
+/* Serializes portal saves with the stop/start transition they may trigger. */
+static SemaphoreHandle_t s_gateway_update_lock;
+/* The HTTP server starts before the rest of app_main finishes so the portal can
+ * be reached during Wi-Fi provisioning. Do not accept config writes until the
+ * initial app_claw/node wiring is complete. */
+static volatile bool s_app_ready;
+/* True when the current Gateway setting has been applied: either the client
+ * started successfully or the Native Node is intentionally disabled. A started
+ * client can still be reconnecting; that is handled by esp_websocket_client. */
+static volatile bool s_openclaw_node_started;
 
 /* app_config stores the values; app_claw consumes them. The mapping lives here,
  * in the composition root, so that app_config does not have to depend on
@@ -48,7 +59,7 @@ static void config_to_claw(const app_config_t *config, app_claw_config_t *out)
     strlcpy(out->enabled_lua_modules, config->enabled_lua_modules, sizeof(out->enabled_lua_modules));
 }
 
-static void start_openclaw_node_if_configured(const app_config_t *app_config);
+static esp_err_t start_openclaw_node_if_configured(const app_config_t *app_config);
 
 static esp_err_t app_allocate_runtime_state(void)
 {
@@ -58,8 +69,11 @@ static esp_err_t app_allocate_runtime_state(void)
     if (!s_claw_config) {
         s_claw_config = calloc(1, sizeof(*s_claw_config));
     }
+    if (!s_gateway_update_lock) {
+        s_gateway_update_lock = xSemaphoreCreateMutex();
+    }
 
-    ESP_RETURN_ON_FALSE(s_config && s_claw_config, ESP_ERR_NO_MEM, TAG,
+    ESP_RETURN_ON_FALSE(s_config && s_claw_config && s_gateway_update_lock, ESP_ERR_NO_MEM, TAG,
                         "Failed to allocate runtime state");
 
     return ESP_OK;
@@ -70,11 +84,10 @@ static void app_free_runtime_state(void)
     free(s_claw_config);
     s_claw_config = NULL;
 
-    /* s_config is deliberately kept allocated for the lifetime of the process.
-     * The portal save path (main_save_config) writes the newly accepted values
-     * back into it and restarts the Native Node so a Gateway change takes
-     * effect without a reflash. Freeing it here would turn that branch into
-     * dead code and silently require a reboot instead. */
+    /* s_config and s_gateway_update_lock are deliberately kept for the lifetime
+     * of the process. The portal save path writes the newly accepted values
+     * back into s_config and may restart the Native Node; freeing either here
+     * would turn that branch into dead code and silently require a reboot. */
 }
 
 /* The provisioning AP is WPA2 when `ap_password` is set and completely open
@@ -153,48 +166,68 @@ static esp_err_t main_save_config(const app_config_t *config)
     app_claw_config_t *claw_config = NULL;
 
     ESP_RETURN_ON_FALSE(config, ESP_ERR_INVALID_ARG, TAG, "config is NULL");
+    ESP_RETURN_ON_FALSE(s_app_ready && s_config && s_gateway_update_lock, ESP_ERR_INVALID_STATE, TAG,
+                        "runtime state is not ready");
     ESP_RETURN_ON_ERROR(app_config_validate_wifi(config, NULL), TAG, "Invalid Wi-Fi config");
     ESP_RETURN_ON_ERROR(app_config_validate_openclaw(config, NULL), TAG, "Invalid OpenClaw config");
 
-    err = app_config_save(config);
-    if (err != ESP_OK) {
-        return err;
-    }
-
+    /* Allocate before touching NVS. A successful persistent write must not be
+     * reported as a successful runtime update merely because the temporary
+     * app_claw mapping could not be allocated. */
     claw_config = calloc(1, sizeof(*claw_config));
     if (!claw_config) {
-        ESP_LOGW(TAG, "Failed to allocate runtime config");
-        return ESP_OK;
+        return ESP_ERR_NO_MEM;
     }
     config_to_claw(config, claw_config);
+
+    /* The portal can have several request tasks. Keep the persistent write,
+     * cached composition-root state, and Gateway stop/start transition in one
+     * serialized operation so two submissions cannot cross their lifecycles. */
+    xSemaphoreTake(s_gateway_update_lock, portMAX_DELAY);
+
+    err = app_config_save(config);
+    if (err != ESP_OK) {
+        goto out;
+    }
+
     err = app_claw_update_config(claw_config);
-    free(claw_config);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to update runtime config: %s", esp_err_to_name(err));
+        goto out;
     }
 
     /* The Native Node holds its own copies of the strings it was handed, but the
      * Gateway settings themselves live in s_config. Write the accepted values
      * back and bounce the WebSocket client so a Gateway change takes effect
-     * without rebuilding or reflashing the firmware. Only the OpenClaw fields
-     * are compared: saving Wi-Fi, capability, or Lua settings must not tear down
-     * a healthy Gateway session. */
-    if (s_config) {
-        bool gateway_changed =
-            strcmp(s_config->openclaw_gateway_url, config->openclaw_gateway_url) != 0 ||
-            strcmp(s_config->openclaw_gateway_token, config->openclaw_gateway_token) != 0 ||
-            strcmp(s_config->openclaw_device_family, config->openclaw_device_family) != 0;
+     * without rebuilding or reflashing. Saving Wi-Fi, capability, or Lua
+     * settings must not tear down a healthy Gateway session. If a previous
+     * start failed, retry it even when the Gateway fields are unchanged. */
+    bool gateway_changed =
+        strcmp(s_config->openclaw_gateway_url, config->openclaw_gateway_url) != 0 ||
+        strcmp(s_config->openclaw_gateway_token, config->openclaw_gateway_token) != 0 ||
+        strcmp(s_config->openclaw_device_family, config->openclaw_device_family) != 0;
 
-        *s_config = *config;
+    *s_config = *config;
 
-        if (gateway_changed) {
-            /* stop() waits for the WebSocket task to exit, so the state reset it
-             * performs cannot race the event handler. */
-            openclaw_node_stop();
-            start_openclaw_node_if_configured(s_config);
+    if (gateway_changed || !s_openclaw_node_started) {
+        /* stop() waits for the WebSocket task to exit, so the state reset it
+         * performs cannot race the event handler. */
+        err = openclaw_node_stop();
+        s_openclaw_node_started = false;
+        if (err == ESP_OK) {
+            err = start_openclaw_node_if_configured(s_config);
         }
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to apply Gateway runtime config: %s", esp_err_to_name(err));
+        }
+    } else {
+        err = ESP_OK;
     }
-    return ESP_OK;
+
+out:
+    xSemaphoreGive(s_gateway_update_lock);
+    free(claw_config);
+    return err;
 }
 
 static esp_err_t main_get_wifi_status(http_server_wifi_status_t *status)
@@ -242,12 +275,21 @@ static esp_err_t openclaw_node_sign_cb(const char *payload,
  * left over is covered by the WebSocket client's own reconnect loop. */
 #define OPENCLAW_WSS_CLOCK_WAIT_MS 5000
 
-static void start_openclaw_node_if_configured(const app_config_t *app_config)
+static esp_err_t start_openclaw_node_if_configured(const app_config_t *app_config)
 {
-    if (!app_config || app_config->openclaw_gateway_url[0] == '\0') {
-        ESP_LOGI(TAG, "OpenClaw Native Node disabled: no Gateway URL configured");
-        return;
+    if (!app_config) {
+        s_openclaw_node_started = false;
+        return ESP_ERR_INVALID_ARG;
     }
+    if (app_config->openclaw_gateway_url[0] == '\0') {
+        ESP_LOGI(TAG, "OpenClaw Native Node disabled: no Gateway URL configured");
+        /* An empty URL is a successfully applied disabled state, not a failed
+         * start. This prevents every unrelated config save from calling stop(). */
+        s_openclaw_node_started = true;
+        return ESP_OK;
+    }
+
+    s_openclaw_node_started = false;
 
     /* Only TLS checks the certificate dates, so a plain ws:// endpoint has no
      * reason to wait for the clock. */
@@ -262,10 +304,13 @@ static void start_openclaw_node_if_configured(const app_config_t *app_config)
     /* The Native Node task uses these strings after this function returns. */
     static char device_id[OPENCLAW_NODE_ED25519_PUBLIC_KEY_LEN * 2 + 1];
     static char public_key[64];
-    if (openclaw_node_identity_get_id(device_id, sizeof(device_id)) != ESP_OK ||
-        openclaw_node_identity_get_public_key_b64url(public_key, sizeof(public_key)) != ESP_OK) {
-        ESP_LOGW(TAG, "Native Node not started: identity is unavailable");
-        return;
+    esp_err_t err = openclaw_node_identity_get_id(device_id, sizeof(device_id));
+    if (err == ESP_OK) {
+        err = openclaw_node_identity_get_public_key_b64url(public_key, sizeof(public_key));
+    }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Native Node not started: identity is unavailable: %s", esp_err_to_name(err));
+        return err;
     }
     openclaw_node_config_t config = {
         .gateway_url = app_config->openclaw_gateway_url,
@@ -281,10 +326,13 @@ static void start_openclaw_node_if_configured(const app_config_t *app_config)
         .sign_cb = openclaw_node_sign_cb,
         .command_cb = openclaw_node_device_command,
     };
-    esp_err_t err = openclaw_node_start(&config);
+    err = openclaw_node_start(&config);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Native Node start failed: %s", esp_err_to_name(err));
+        return err;
     }
+    s_openclaw_node_started = true;
+    return ESP_OK;
 }
 
 static esp_err_t init_nvs(void)
@@ -452,7 +500,12 @@ void app_main(void)
     }
 
     ESP_ERROR_CHECK(app_claw_start(s_claw_config));
-    start_openclaw_node_if_configured(s_config);
+    esp_err_t node_err = start_openclaw_node_if_configured(s_config);
+    if (node_err != ESP_OK) {
+        ESP_LOGW(TAG, "Native Node is not running; a later config save will retry: %s",
+                 esp_err_to_name(node_err));
+    }
+    s_app_ready = true;
 
     register_wifi_command();
 

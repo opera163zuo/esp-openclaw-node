@@ -62,9 +62,10 @@ static inline const char *app_config_field_cptr(const app_config_t *config, cons
  *
  * This cannot go stale: settings_store_get_string/set_string are used nowhere
  * else, so app_config_load() and app_config_save() are the only gateways to
- * this namespace and both keep the cache in step. The lock covers the struct
- * copy, because the portal and the CLI task can call in at the same time; it is
- * created in app_config_init() so that no caller has to race to lazily make it. */
+ * this namespace and both keep the cache in step. The lock serializes the
+ * complete NVS write and cache refresh because the portal and CLI task can call
+ * in at the same time; it is created in app_config_init() so that no caller has
+ * to race to lazily make it. */
 static app_config_t s_cache;
 static bool s_cache_valid;
 static SemaphoreHandle_t s_cache_lock;
@@ -175,14 +176,20 @@ esp_err_t app_config_save(const app_config_t *config)
     ESP_RETURN_ON_FALSE(s_cache_lock, ESP_ERR_INVALID_STATE, TAG,
                         "app_config_init() was not called");
 
+    /* Serialize the complete NVS write and cache refresh with load() and other
+     * saves. Without holding the lock here, a portal save and a CLI save could
+     * interleave their per-field NVS commits and then publish a cache snapshot
+     * that does not match the last complete write. */
+    xSemaphoreTake(s_cache_lock, portMAX_DELAY);
+
     esp_err_t err = app_config_write_nvs(config);
     if (err != ESP_OK) {
+        xSemaphoreGive(s_cache_lock);
         return err;
     }
 
     /* Refresh the cache, otherwise the next load would hand back the values
      * from before this save. */
-    xSemaphoreTake(s_cache_lock, portMAX_DELAY);
     s_cache = *config;
     s_cache_valid = true;
     xSemaphoreGive(s_cache_lock);
