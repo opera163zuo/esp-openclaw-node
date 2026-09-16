@@ -492,7 +492,10 @@ static void fake_gateway_task(void *arg)
         if (gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_LONG) != ESP_OK) {
             ESP_LOGE(TAG, "fake gateway: long invoke send failed");
         }
-        for (int i = 0; i < 100; i++) {
+        /* s_gw_fd goes negative when the test tears the gateway down, which is
+         * what stops this loop: a task left running past its test would
+         * otherwise write onto whatever connection a later test had opened. */
+        for (int i = 0; i < 100 && s_gw_fd >= 0; i++) {
             gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
             vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
         }
@@ -528,7 +531,7 @@ static void fake_gateway_task(void *arg)
         gw_send_text_frame_split(invoke, strlen(invoke), strlen(invoke) / 2, 250);
         free(invoke);
 
-        for (int i = 0; i < 100 && s_gw.reply_count == 0; i++) {
+        for (int i = 0; i < 100 && s_gw.reply_count == 0 && s_gw_fd >= 0; i++) {
             gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
             vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
         }
@@ -554,7 +557,7 @@ static void fake_gateway_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(300));
         gw_send_invoke(TEST_SLOW_ID, TEST_COMMAND_ECHO);
 
-        for (int i = 0; i < 100 && s_gw.reply_count == 0; i++) {
+        for (int i = 0; i < 100 && s_gw.reply_count == 0 && s_gw_fd >= 0; i++) {
             gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
             vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
         }
@@ -572,7 +575,7 @@ static void fake_gateway_task(void *arg)
         goto done;
     }
 
-    for (int waited = 0; waited < TEST_SLOW_COMMAND_MS + 3000;
+    for (int waited = 0; waited < TEST_SLOW_COMMAND_MS + 3000 && s_gw_fd >= 0;
          waited += TEST_PING_INTERVAL_MS) {
         gw_send(HTTPD_WS_TYPE_PING, NULL, 0);
         vTaskDelay(pdMS_TO_TICKS(TEST_PING_INTERVAL_MS));
@@ -967,7 +970,12 @@ TEST_CASE("openclaw_node: a wss:// endpoint starts a TLS handshake", "[openclaw_
 /* The node rebuilds a frame from the events the client hands it, matching
  * payload_offset against its own byte count, and refuses anything that does not
  * fit its buffer. Both paths are buffer-safety critical, so they get their own
- * cases rather than being left to the round-trip tests above. */
+ * cases rather than being left to the round-trip tests above.
+ *
+ * The oversized case really does reach the node's guard: the client has no
+ * buffer-size check of its own - it reads the frame in chunks and dispatches
+ * each one with payload_len set to the frame's full length - so an oversized
+ * frame is delivered rather than swallowed before the node sees it. */
 
 TEST_CASE("openclaw_node: a frame split across reads is reassembled", "[openclaw_node]")
 {
