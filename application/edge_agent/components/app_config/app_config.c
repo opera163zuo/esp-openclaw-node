@@ -283,18 +283,6 @@ esp_err_t app_config_validate_openclaw(const app_config_t *config, const char **
     return ESP_OK;
 }
 
-void app_config_to_claw(const app_config_t *config, app_claw_config_t *out)
-{
-    if (!config || !out) {
-        return;
-    }
-
-    memset(out, 0, sizeof(*out));
-
-    strlcpy(out->enabled_cap_groups, config->enabled_cap_groups, sizeof(out->enabled_cap_groups));
-    strlcpy(out->enabled_lua_modules, config->enabled_lua_modules, sizeof(out->enabled_lua_modules));
-}
-
 const char *app_config_get_timezone(const app_config_t *config)
 {
     return config ? config->time_timezone : NULL;

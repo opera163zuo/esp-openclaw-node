@@ -1,0 +1,15 @@
+menu "Test App Config"
+
+    # app_config.h maps these two onto APP_WIFI_SSID / APP_WIFI_PASSWORD, so the
+    # symbols have to exist for that component to compile. These tests never
+    # touch a real network, so the values do not matter.
+
+    config APP_WIFI_SSID
+        string "Default Wi-Fi SSID"
+        default ""
+
+    config APP_WIFI_PASSWORD
+        string "Default Wi-Fi password"
+        default ""
+
+endmenu

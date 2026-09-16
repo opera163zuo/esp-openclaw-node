@@ -37,6 +37,17 @@ static const char *TAG = "app";
 static app_config_t *s_config;
 static app_claw_config_t *s_claw_config;
 
+/* app_config stores the values; app_claw consumes them. The mapping lives here,
+ * in the composition root, so that app_config does not have to depend on
+ * app_claw just to name its type - which is what kept app_config tied to the
+ * whole capability framework. */
+static void config_to_claw(const app_config_t *config, app_claw_config_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    strlcpy(out->enabled_cap_groups, config->enabled_cap_groups, sizeof(out->enabled_cap_groups));
+    strlcpy(out->enabled_lua_modules, config->enabled_lua_modules, sizeof(out->enabled_lua_modules));
+}
+
 static void start_openclaw_node_if_configured(const app_config_t *app_config);
 
 static esp_err_t app_allocate_runtime_state(void)
@@ -155,7 +166,7 @@ static esp_err_t main_save_config(const app_config_t *config)
         ESP_LOGW(TAG, "Failed to allocate runtime config");
         return ESP_OK;
     }
-    app_config_to_claw(config, claw_config);
+    config_to_claw(config, claw_config);
     err = app_claw_update_config(claw_config);
     free(claw_config);
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
@@ -378,7 +389,7 @@ void app_main(void)
     ESP_ERROR_CHECK(app_config_init());
     ESP_ERROR_CHECK(app_config_load(s_config));
     ensure_ap_password(s_config);
-    app_config_to_claw(s_config, s_claw_config);
+    config_to_claw(s_config, s_claw_config);
     init_timezone(app_config_get_timezone(s_config)); // no need to check error
     ESP_ERROR_CHECK(esp_board_manager_init());
     ESP_ERROR_CHECK(app_fs_init());

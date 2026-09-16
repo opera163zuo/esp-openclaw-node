@@ -4,6 +4,7 @@ idf_component_register(
     INCLUDE_DIRS
         "."
     PRIV_REQUIRES
+        app_config
         esp_http_server
         json
         openclaw_node

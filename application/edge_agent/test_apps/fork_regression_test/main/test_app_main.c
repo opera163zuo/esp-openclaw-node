@@ -3,24 +3,31 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  *
- * On-target regression tests for the fork's changes to the Native Node
- * transport.
+ * On-target regression tests for the fork's changes.
  *
- * The transport must survive repeated start/stop without leaking, and must keep
- * servicing the socket while a slow command runs. That second property is the
- * point of running commands on a worker: the WebSocket task owns the receive
- * loop, so blocking it inside a command stalls the connection until the Gateway
- * gives up on the node.
+ * Two groups:
  *
- * These tests need no Gateway. They run a WebSocket server on the device itself
- * and point the node at it over loopback, so they need neither Wi-Fi nor a
- * board. The evidence that the socket stays live is the PING/PONG traffic:
+ *   [app_config]     the in-memory config cache must never hand back a stale
+ *                    value, and a loaded copy must not be able to mutate the
+ *                    store behind the next caller's back.
+ *
+ *   [openclaw_node]  the transport must survive repeated start/stop without
+ *                    leaking, and must keep servicing the socket while a slow
+ *                    command runs. That second property is the point of running
+ *                    commands on a worker: the WebSocket task owns the receive
+ *                    loop, so blocking it inside a command stalls the
+ *                    connection until the Gateway gives up on the node.
+ *
+ * The transport tests need no Gateway. They run a WebSocket server on the device
+ * itself and point the node at it over loopback, so they need neither Wi-Fi nor
+ * a board. The evidence that the socket stays live is the PING/PONG traffic:
  * esp_transport_ws answers a PING from inside the client's receive loop, so a
  * WebSocket task that is stuck in a command answers none of them.
  */
 #include <stdio.h>
 #include <string.h>
 
+#include "app_config.h"
 #include "cJSON.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -31,11 +38,90 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "nvs_flash.h"
 #include "openclaw_node.h"
 #include "unity.h"
 #include "unity_test_runner.h"
 
 static const char *TAG = "fork_regression";
+
+/* ── app_config: the in-memory cache ───────────────────────────────────── */
+
+/* Both structs are ~4 KB, so they are static rather than stacked. */
+static app_config_t s_config_a;
+static app_config_t s_config_b;
+
+static void config_group_setup(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+    ESP_ERROR_CHECK(app_config_init());
+}
+
+TEST_CASE("app_config: load returns what save stored", "[app_config]")
+{
+    memset(&s_config_a, 0, sizeof(s_config_a));
+    app_config_load_defaults(&s_config_a);
+    strlcpy(s_config_a.wifi_ssid, "cache-ssid", sizeof(s_config_a.wifi_ssid));
+    strlcpy(s_config_a.portal_password, "cache-portal", sizeof(s_config_a.portal_password));
+    strlcpy(s_config_a.openclaw_gateway_url, "ws://cache.invalid/ws",
+            sizeof(s_config_a.openclaw_gateway_url));
+
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_save(&s_config_a));
+
+    memset(&s_config_b, 0, sizeof(s_config_b));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_b));
+    TEST_ASSERT_EQUAL_STRING("cache-ssid", s_config_b.wifi_ssid);
+    TEST_ASSERT_EQUAL_STRING("cache-portal", s_config_b.portal_password);
+    TEST_ASSERT_EQUAL_STRING("ws://cache.invalid/ws", s_config_b.openclaw_gateway_url);
+}
+
+/* The cache introduces exactly one new failure mode: a write stops being
+ * observed. Before it existed this held trivially, because every load walked
+ * NVS. The two writers below stand in for the portal and the CLI's `wifi set`,
+ * which is the pair that would silently revert each other's changes. */
+TEST_CASE("app_config: a save is visible to the very next load", "[app_config]")
+{
+    memset(&s_config_a, 0, sizeof(s_config_a));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_a));
+    strlcpy(s_config_a.wifi_ssid, "written-by-cli", sizeof(s_config_a.wifi_ssid));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_save(&s_config_a));
+
+    memset(&s_config_b, 0, sizeof(s_config_b));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_b));
+    TEST_ASSERT_EQUAL_STRING("written-by-cli", s_config_b.wifi_ssid);
+
+    /* And back the other way, as the portal would do it. */
+    strlcpy(s_config_b.wifi_ssid, "written-by-portal", sizeof(s_config_b.wifi_ssid));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_save(&s_config_b));
+
+    memset(&s_config_a, 0, sizeof(s_config_a));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_a));
+    TEST_ASSERT_EQUAL_STRING("written-by-portal", s_config_a.wifi_ssid);
+}
+
+/* load() must hand back a copy. If it returned the cached struct itself, a
+ * caller editing the result in place would silently rewrite the stored config
+ * for everyone else. */
+TEST_CASE("app_config: a loaded copy cannot mutate the store", "[app_config]")
+{
+    memset(&s_config_a, 0, sizeof(s_config_a));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_a));
+    strlcpy(s_config_a.wifi_ssid, "pinned-value", sizeof(s_config_a.wifi_ssid));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_save(&s_config_a));
+
+    memset(&s_config_b, 0, sizeof(s_config_b));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_b));
+    strlcpy(s_config_b.wifi_ssid, "local-edit-never-saved", sizeof(s_config_b.wifi_ssid));
+
+    memset(&s_config_a, 0, sizeof(s_config_a));
+    TEST_ASSERT_EQUAL(ESP_OK, app_config_load(&s_config_a));
+    TEST_ASSERT_EQUAL_STRING("pinned-value", s_config_a.wifi_ssid);
+}
 
 /* ── openclaw_node: the command callback used by the tests ─────────────── */
 
@@ -440,5 +526,6 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+    config_group_setup();
     unity_run_menu();
 }

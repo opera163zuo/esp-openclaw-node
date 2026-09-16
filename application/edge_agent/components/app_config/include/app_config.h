@@ -5,7 +5,6 @@
  */
 #pragma once
 
-#include "app_claw.h"
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -14,6 +13,11 @@ extern "C" {
 
 #define APP_CONFIG_STR_LEN        320
 #define APP_CONFIG_TIMEZONE_LEN   32
+/* Size of openclaw_device_family. This mirrors APP_CLAW_MODEL_LEN, which
+ * app_claw uses for the same value; it is spelled out here so that this
+ * component does not have to depend on app_claw just for a length. The two must
+ * stay equal, because the stored NVS blob is sized by this one. */
+#define APP_CONFIG_DEVICE_FAMILY_LEN 64
 
 #define APP_WIFI_SSID             CONFIG_APP_WIFI_SSID
 #define APP_WIFI_PASSWORD         CONFIG_APP_WIFI_PASSWORD
@@ -45,7 +49,7 @@ typedef struct {
     char openclaw_gateway_url[APP_CONFIG_STR_LEN];
     char openclaw_gateway_token[APP_CONFIG_STR_LEN];
     /* Reported to the Gateway as the node's device family. */
-    char openclaw_device_family[APP_CLAW_MODEL_LEN];
+    char openclaw_device_family[APP_CONFIG_DEVICE_FAMILY_LEN];
     /* Which capability groups and Lua modules this device exposes. */
     char enabled_cap_groups[APP_CONFIG_STR_LEN];
     char enabled_lua_modules[APP_CONFIG_STR_LEN];
@@ -58,7 +62,6 @@ esp_err_t app_config_load(app_config_t *config);
 esp_err_t app_config_save(const app_config_t *config);
 esp_err_t app_config_validate_wifi(const app_config_t *config, const char **message);
 esp_err_t app_config_validate_openclaw(const app_config_t *config, const char **message);
-void app_config_to_claw(const app_config_t *config, app_claw_config_t *out);
 const char *app_config_get_timezone(const app_config_t *config);
 
 #ifdef __cplusplus
