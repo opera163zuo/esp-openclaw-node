@@ -23,10 +23,11 @@ set(http_server_srcs
     "http_server_utils.c"
 )
 
+# app_claw is needed for the Lua module listing in http_server_lua_modules_api.c.
+# claw_cap is not referenced anywhere in this component and was dropped.
 set(http_server_requires
     app_config
     app_claw
-    claw_cap
     esp_http_server
     heap
     mbedtls
