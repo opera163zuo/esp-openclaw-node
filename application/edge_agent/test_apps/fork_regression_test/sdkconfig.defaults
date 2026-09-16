@@ -1,0 +1,25 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+# The transport is under test, not the board command table. Turning this off is
+# what keeps the board manager, LVGL, the system UI and the audio stack out of
+# this build.
+CONFIG_OPENCLAW_NODE_DEVICE_COMMANDS=n
+
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_UNITY_ENABLE_FLOAT=y
+
+# The fake Gateway is an esp_http_server WebSocket endpoint, so the server side
+# of the protocol has to be compiled in.
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# The fake Gateway listens on the device itself and the node reaches it over
+# loopback, so no Wi-Fi is needed to run the transport tests.
+CONFIG_LWIP_NETIF_LOOPBACK=y
+
+CONFIG_ESP_TASK_WDT_EN=n
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384

@@ -1,13 +1,35 @@
 ## IDF Component Manager Manifest File
+##
+## The board manager, system UI, codec and capability dependencies exist only for
+## the device command table, so they follow the same switch as the source that
+## needs them. With OPENCLAW_NODE_DEVICE_COMMANDS off, the component resolves to
+## the transport alone and can be built without a board or a display.
 dependencies:
   espressif/esp_websocket_client:
     version: "^1.8"
     public: true
+
   system_ui:
     path: ../common/system_ui
+    rules:
+      - if: $CONFIG{OPENCLAW_NODE_DEVICE_COMMANDS} == True
+
   cap_files:
     path: ../claw_capabilities/cap_files
+    rules:
+      - if: $CONFIG{OPENCLAW_NODE_DEVICE_COMMANDS} == True
+
   cap_lua:
     path: ../claw_capabilities/cap_lua
-  esp_codec_dev: "*"
-  espressif/esp_board_manager: "*"
+    rules:
+      - if: $CONFIG{OPENCLAW_NODE_DEVICE_COMMANDS} == True
+
+  espressif/esp_codec_dev:
+    version: "*"
+    rules:
+      - if: $CONFIG{OPENCLAW_NODE_DEVICE_COMMANDS} == True
+
+  espressif/esp_board_manager:
+    version: "*"
+    rules:
+      - if: $CONFIG{OPENCLAW_NODE_DEVICE_COMMANDS} == True

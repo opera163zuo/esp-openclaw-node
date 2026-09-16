@@ -1,0 +1,16 @@
+menu "OpenClaw Native Node"
+
+    config OPENCLAW_NODE_DEVICE_COMMANDS
+        bool "Built-in board device commands"
+        default y
+        help
+            Build the device command table that node.invoke.request dispatches
+            to: screen, audio, backlight, button, file and Lua commands. It needs
+            the board manager, the system UI and the capability framework.
+
+            Disable this to build the transport on its own. The component's own
+            on-target tests do that, so they can run without a board, a display
+            or the audio stack. openclaw_node_device_commands() then reports an
+            empty command list and every command answers ESP_ERR_NOT_SUPPORTED.
+
+endmenu
